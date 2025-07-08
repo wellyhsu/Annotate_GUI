@@ -1,6 +1,15 @@
 ## Citation
 
-> Author(s). (Year). Title of the Paper. *Journal/Conference*, Volume(Issue), Pages. DOI/Publisher.
+@inproceedings{Ego2HandsPose:2024,
+  title     = {Ego2HandsPose: A Dataset for Egocentric Two-hand 3D Global Pose Estimation},
+  author    = {Lin, Fanqing and Martinez, Tony},
+  booktitle = {2024 IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)},
+  year      = {2024},
+  publisher = {IEEE},
+  doi       = {10.1109/WACV57701.2024.00432}
+}
+
+
 ## Download Pretrained Models
 * Download the following models and place them in the "models_saved" directory.
 
