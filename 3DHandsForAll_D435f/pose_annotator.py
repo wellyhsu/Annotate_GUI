@@ -19,13 +19,20 @@ def natural_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split('(\d+)', s)]
 
 
+Senario = 'kitchen'
+Object = 'Bowl'
 class pose_annotation_app:
     def __init__(self, args):
         self.args = args
         self.init_window()
+        # Senario/Object/Sensor
+        #               /Master_D435f
+        #               /Slave_D435
+        #               Senario/Object/Annotate/Sensor
+        #                                       /Master_D435f
+        #                                       /Slave_D435
         self.samples_dir_path = 'sample_imgs'
-        # self.samples_dir_path = '/home/welly/Downloads/D435f_Master/bear/RGB'
-        # self.samples_dir_path = '/home/welly/Downloads/D435_slave/cup/RGB'
+        # self.samples_dir_path = f'{Senario}/{Object}/RGB'
         self.img_path_list = self.load_input_imgs()
         self.img_i = 0 #314# 0
         self.init_models()
@@ -165,21 +172,25 @@ class pose_annotation_app:
         img_path = self.img_path_list[self.img_i]
         img_dir, img_filename = os.path.split(img_path)
         # 取得圖片上一層資料夾名稱
-        parent_dir = os.path.dirname(img_dir)
+        img_path = os.path.abspath(img_path)
+        parent_dir = os.path.dirname(img_path)
+        parent_dir = os.path.dirname(parent_dir)   # 圖片上上一層資料夾名稱
+        parent_dir = os.path.dirname(parent_dir)   # 圖片上上一層資料夾名稱
         img_basename, _ = os.path.splitext(img_filename)
 
          # 取出檔名數字（例如：'10.png' → 10）
         match = re.match(r"(\d+)", img_basename)
         img_index = int(match.group(1)) if match else -1  # 若無數字則 -1
-
+        print(img_path)
+        print(parent_dir)
         # 嘗試尋找相同編號的 keypoint 檔案
-        pattern = os.path.join(parent_dir+"/annotate", f"{img_basename}_kpts_2d_glob_*.npy")
+        pattern = os.path.join(parent_dir, Senario, Object, "annotate", "Slave_D435", f"{img_basename}_kpts_2d_glob_*.npy")
         matching_files = glob.glob(pattern)
 
         # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
         if not matching_files and img_index > 0:
             prev_basename = img_basename.replace(str(img_index), str(img_index - 1), 1)
-            fallback_pattern = os.path.join(parent_dir+"/annotate", f"{prev_basename}_kpts_2d_glob_*.npy")
+            fallback_pattern = os.path.join(parent_dir, Senario, Object, "annotate", "Slave_D435", f"{prev_basename}_kpts_2d_glob_*.npy")
             matching_files = glob.glob(fallback_pattern)
             if matching_files:
                 print(f"找不到 {img_basename} 對應的 keypoint，改用 {prev_basename}")
@@ -207,13 +218,13 @@ class pose_annotation_app:
             print("Can't find 2d keypoints")
 
         # ==== 新增：載入 3D keypoints（如有） ====
-        pattern = os.path.join(parent_dir+"/annotate", f"{img_basename}_kpts_3d_glob_*.npy")
+        pattern = os.path.join(parent_dir, Senario, Object, "annotate", "Slave_D435", f"{img_basename}_kpts_3d_glob_*.npy")
         matching_files = glob.glob(pattern)
 
         # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
         if not matching_files and img_index > 0:
             prev_basename = img_basename.replace(str(img_index), str(img_index - 1), 1)
-            fallback_pattern = os.path.join(parent_dir+"/annotate", f"{prev_basename}_kpts_3d_glob_*.npy")
+            fallback_pattern = os.path.join(parent_dir, Senario, Object, "annotate", "Slave_D435", f"{prev_basename}_kpts_3d_glob_*.npy")
             matching_files = glob.glob(fallback_pattern)
             if matching_files:
                 print(f"找不到 {img_basename} 對應的 keypoint，改用 {prev_basename}")
@@ -1108,7 +1119,7 @@ class pose_annotation_app:
                 ext = '.' + img_path.split('.')[-1]
                 confidence_save_np_path = img_path.replace(ext, '_keypoint_confidences_{}.npy'.format(self.args.hand_mode))
                 
-                np.save(confidence_save_np_path, confidences_np)
+                # np.save(confidence_save_np_path, confidences_np)
 
                 kpts_2d = get_2d_kpts(heatmaps_np, img_h=params.IMG_SIZE, img_w=params.IMG_SIZE, \
                     num_keypoints=params.NUM_KPTS)
@@ -1223,11 +1234,17 @@ class pose_annotation_app:
     def button_save_callback(self):
         self.results_saved = True
         # === 1. 基本路徑處理 ===
+        # Senario/Object/Sensor/gray
+        # Senario/Object/Master_D435f/RGB
+        # Senario/Object/Slave_D435/RGB
         img_path = self.img_path_list[self.img_i]  # 原始圖片完整路徑
+        img_path = os.path.abspath(img_path)
         img_dir  = os.path.dirname(img_path)                  # 圖片當前資料夾名稱
+        # print(img_dir)
         parent_dir = os.path.dirname(img_dir)                 # 圖片上一層資料夾名稱
-        save_dir = os.path.join(parent_dir, "annotate")       # 在圖片上一層資料夾創建annotate資料夾
-        os.makedirs(save_dir, exist_ok=True)                  # 若不存在就建立
+        parent_dir = os.path.dirname(parent_dir)              # 圖片上上一層資料夾名稱
+        save_dir = os.path.join(parent_dir, Senario, Object, "annotate", "Slave_D435")  # 設置annotate資料夾路徑
+        os.makedirs(save_dir, exist_ok=True)     # 若不存在就建立
 
         img_base, ext = os.path.splitext(os.path.basename(img_path)) # 將檔名與附檔名分開
 
