@@ -1116,7 +1116,7 @@ class pose_annotation_app:
                 ext = '.' + img_path.split('.')[-1]
                 confidence_save_np_path = img_path.replace(ext, '_keypoint_confidences_{}.npy'.format(self.args.hand_mode))
                 
-                np.save(confidence_save_np_path, confidences_np)
+                # np.save(confidence_save_np_path, confidences_np)
 
                 kpts_2d = get_2d_kpts(heatmaps_np, img_h=params.IMG_SIZE, img_w=params.IMG_SIZE, \
                     num_keypoints=params.NUM_KPTS)
@@ -1558,4 +1558,5 @@ if __name__ == '__main__':
 
     #     # 儲存結果
     #     app.button_save_callback()
+
 
