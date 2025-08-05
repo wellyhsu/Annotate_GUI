@@ -654,7 +654,7 @@ class pose_annotation_app:
                 name = k[7:]
                 new_state_dict[name] = v
             model.load_state_dict(new_state_dict)
-            self.model_2d = torch.nn.DataParallel(model, device_ids=[0]).cpu()
+            self.model_2d = model.cpu()
             self.model_2d.eval()
             print('Model 2D succesfully loaded')
             
@@ -674,7 +674,7 @@ class pose_annotation_app:
                 name = k[7:]
                 new_state_dict[name] = v
             model.load_state_dict(new_state_dict)
-            self.model_3d_3rd = torch.nn.DataParallel(model, device_ids=[0]).cpu()
+            self.model_3d_3rd = model.cpu()
             self.model_3d_3rd.eval()
             print('Model third-person 3D succesfully loaded')
             
@@ -694,7 +694,7 @@ class pose_annotation_app:
                 name = k[7:]
                 new_state_dict[name] = v
             model.load_state_dict(new_state_dict)
-            self.model_3d_ego = torch.nn.DataParallel(model, device_ids=[0]).cpu()
+            self.model_3d_ego = model.cpu()
             self.model_3d_ego.eval()
             print('Model egocentric 3D succesfully loaded')
             
@@ -1108,8 +1108,8 @@ class pose_annotation_app:
                     kpts_2d.append((y_scaled, x_scaled))
                     confidences.append(confidence)
                 # 印出每個關鍵點的信心值
-                for i, (coord, conf) in enumerate(zip(kpts_2d, confidences)):
-                    print(f"2D Keypoint {i}, Confidence = {conf:.4f}")
+                # for i, (coord, conf) in enumerate(zip(kpts_2d, confidences)):
+                #     print(f"2D Keypoint {i}, Confidence = {conf:.4f}")
                 
                 # 💾 Save confidences as .npy file
                 confidences_np = np.array(confidences, dtype=np.float32)
@@ -1561,4 +1561,5 @@ if __name__ == '__main__':
 
     #     # 儲存結果
     #     app.button_save_callback()
+
 
