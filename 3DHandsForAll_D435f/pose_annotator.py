@@ -13,26 +13,28 @@ import params
 import trimesh
 import glob
 import re
+from pathlib import Path
+import os
 
 def natural_key(s):
     # 將字串拆成數字與非數字部分，用於自然排序
     return [int(text) if text.isdigit() else text.lower() for text in re.split('(\d+)', s)]
 
-
-Senario = 'kitchen'
 Object = 'Bowl'
 class pose_annotation_app:
     def __init__(self, args):
         self.args = args
         self.init_window()
         # Senario/Object/Sensor
-        #               /Master_D435f
-        #               /Slave_D435
+        #               /D435f_Master
+        #               /D435_Slave
         #               Senario/Object/Annotate/Sensor
-        #                                       /Master_D435f
-        #                                       /Slave_D435
-        self.samples_dir_path = 'sample_imgs'
-        # self.samples_dir_path = f'{Senario}/{Object}/Master_D435f/RGB'
+        #                                       /D435f_Master
+        #                                       /D435_Slave
+        # self.samples_dir_path = f"sample_imgs"
+        self.samples_dir_path = f"../Data/{Object}/D435f_Master/RGB"
+
+        print("images folder:", self.samples_dir_path)
         self.img_path_list = self.load_input_imgs()
         self.img_i = 0 #314# 0
         self.init_models()
@@ -176,21 +178,24 @@ class pose_annotation_app:
         parent_dir = os.path.dirname(img_path)
         parent_dir = os.path.dirname(parent_dir)   # 圖片上上一層資料夾名稱
         parent_dir = os.path.dirname(parent_dir)   # 圖片上上一層資料夾名稱
+        if self.samples_dir_path != f"sample_imgs":
+            parent_dir = os.path.dirname(parent_dir)              # 圖片上上上一層資料夾名稱
+            parent_dir = os.path.dirname(parent_dir)              # 圖片上上上上一層資料夾名稱
         img_basename, _ = os.path.splitext(img_filename)
 
          # 取出檔名數字（例如：'10.png' → 10）
         match = re.match(r"(\d+)", img_basename)
         img_index = int(match.group(1)) if match else -1  # 若無數字則 -1
         print(img_path)
-        print(parent_dir)
+
         # 嘗試尋找相同編號的 keypoint 檔案
-        pattern = os.path.join(parent_dir, Senario, Object, "annotate", "Slave_D435", f"{img_basename}_kpts_2d_glob_*.npy")
+        pattern = os.path.join(parent_dir,"Annotate", Object, "D435f_Master", f"{img_basename}_kpts_2d_glob_*.npy")
         matching_files = glob.glob(pattern)
 
         # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
         if not matching_files and img_index > 0:
             prev_basename = img_basename.replace(str(img_index), str(img_index - 1), 1)
-            fallback_pattern = os.path.join(parent_dir, Senario, Object, "annotate", "Slave_D435", f"{prev_basename}_kpts_2d_glob_*.npy")
+            fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "D435f_Master", f"{prev_basename}_kpts_2d_glob_*.npy")
             matching_files = glob.glob(fallback_pattern)
             if matching_files:
                 print(f"找不到 {img_basename} 對應的 keypoint，改用 {prev_basename}")
@@ -218,13 +223,13 @@ class pose_annotation_app:
             print("Can't find 2d keypoints")
 
         # ==== 新增：載入 3D keypoints（如有） ====
-        pattern = os.path.join(parent_dir, Senario, Object, "annotate", "Slave_D435", f"{img_basename}_kpts_3d_glob_*.npy")
+        pattern = os.path.join(parent_dir,"Annotate", Object, "D435f_Master", f"{img_basename}_kpts_3d_glob_*.npy")
         matching_files = glob.glob(pattern)
 
         # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
         if not matching_files and img_index > 0:
             prev_basename = img_basename.replace(str(img_index), str(img_index - 1), 1)
-            fallback_pattern = os.path.join(parent_dir, Senario, Object, "annotate", "Slave_D435", f"{prev_basename}_kpts_3d_glob_*.npy")
+            fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "D435f_Master", f"{prev_basename}_kpts_3d_glob_*.npy")
             matching_files = glob.glob(fallback_pattern)
             if matching_files:
                 print(f"找不到 {img_basename} 對應的 keypoint，改用 {prev_basename}")
@@ -252,8 +257,13 @@ class pose_annotation_app:
             print("Can't find 3d keypoints")            
         self.update_rendered_img()
         self.update_slider_values()
-        self.update_img_display()        
+        self.update_img_display()      
 
+    def set_joint_index(self, index):
+        print(f"切換到關節點：{index}")
+        self.window.slider_joint.set(index)
+        self.on_trackbar_joint(index)
+        
     def init_sliders(self):
         if self.window.panel_sliders is not None:
             self.window.panel_sliders.pack_forget()
@@ -566,6 +576,24 @@ class pose_annotation_app:
         self.window.bind('<KeyPress-plus>', self.keyboard_zoom_in)  # 按下 + 鍵放大
         self.window.bind('<KeyPress-equal>', self.keyboard_zoom_in)  # 按下 = 鍵放大
         self.window.bind('<KeyPress-minus>', self.keyboard_zoom_out)  # 按下 - 鍵縮小
+        # 數字鍵 1~9 → index 1~9
+        for i in range(1, 10):
+            self.window.bind(str(i), lambda e, idx=i: self.set_joint_index(idx))
+
+        # 鍵 '0' → index 10
+        self.window.bind("0", lambda e: self.set_joint_index(10))
+
+        # 鍵 '`'（位於1左邊） → index 0
+        self.window.bind("`", lambda e: self.set_joint_index(0))
+
+        # 鍵 QWERTYUIOP → index 11~20
+        key_to_index = {
+            "q": 11, "w": 12, "e": 13, "r": 14, "t": 15,
+            "y": 16, "u": 17, "i": 18, "o": 19, "p": 20
+        }
+        for key, idx in key_to_index.items():
+            self.window.bind(key, lambda e, i=idx: self.set_joint_index(i))
+            self.window.bind(key.upper(), lambda e, i=idx: self.set_joint_index(i))  # 支援大寫
         self.window.canvas.pack(fill=tk.X,)
     
     def init_buttons(self):
@@ -1107,7 +1135,7 @@ class pose_annotation_app:
                     
                     kpts_2d.append((y_scaled, x_scaled))
                     confidences.append(confidence)
-                # 印出每個關鍵點的信心值
+                # # 印出每個關鍵點的信心值
                 # for i, (coord, conf) in enumerate(zip(kpts_2d, confidences)):
                 #     print(f"2D Keypoint {i}, Confidence = {conf:.4f}")
                 
@@ -1238,21 +1266,31 @@ class pose_annotation_app:
         # Senario/Object/Master_D435f/RGB
         # Senario/Object/Slave_D435/RGB
         img_path = self.img_path_list[self.img_i]  # 原始圖片完整路徑
-        img_path = os.path.abspath(img_path)
-        img_dir  = os.path.dirname(img_path)                  # 圖片當前資料夾名稱
-        # print(img_dir)
+        img_path = Path(img_path)
+        img_path_abs = os.path.abspath(img_path)
+        img_dir  = os.path.dirname(img_path_abs)                  # 圖片當前資料夾名稱
+        
         parent_dir = os.path.dirname(img_dir)                 # 圖片上一層資料夾名稱
         parent_dir = os.path.dirname(parent_dir)              # 圖片上上一層資料夾名稱
-        save_dir = os.path.join(parent_dir, Senario, Object, "annotate", "Slave_D435")  # 設置annotate資料夾路徑
+        if self.samples_dir_path != f"sample_imgs":
+            parent_dir = os.path.dirname(parent_dir)              # 圖片上上上一層資料夾名稱
+            parent_dir = os.path.dirname(parent_dir)              # 圖片上上上上一層資料夾名稱
+        print(parent_dir)
+        save_dir = os.path.join(parent_dir,"Annotate", Object, "D435f_Master")  # 設置annotate資料夾路徑
         os.makedirs(save_dir, exist_ok=True)     # 若不存在就建立
 
         img_base, ext = os.path.splitext(os.path.basename(img_path)) # 將檔名與附檔名分開
 
         # === 2. 取得 MANO / 關鍵點等資料 ===
         mano_save_np = self.mano_fit_tool.get_mano()
-        # np.save(os.path.join(save_dir, f"{img_base}_mano_{self.args.hand_mode}.npy"), mano_save_np)
-       
-        img = cv2.imread(img_path)
+        np.save(os.path.join(save_dir, f"{img_base}_mano_{self.args.hand_mode}.npy"), mano_save_np)
+        print("img_path: ", img_path)
+        img = cv2.imread(str(img_path))
+        if img is None:
+            print(f"Failed to load image: {img_path}")
+        else:
+            print(f"Image loaded with shape: {img.shape}")
+
         height, width = img.shape[:2]
         print(f"Image size: width={width}, height={height}")
 
@@ -1561,6 +1599,4 @@ if __name__ == '__main__':
 
     #     # 儲存結果
     #     app.button_save_callback()
-
-
 
