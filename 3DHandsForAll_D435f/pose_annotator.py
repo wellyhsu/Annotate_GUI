@@ -263,6 +263,14 @@ class pose_annotation_app:
         print(f"切換到關節點：{index}")
         self.window.slider_joint.set(index)
         self.on_trackbar_joint(index)
+
+    def change_joint_index(self, delta):
+        """相對切換關節點 (限制在 0~20 之間)"""
+        current_index = int(self.window.slider_joint.get())
+        new_index = current_index + delta
+        # 限制在 [0, 20]
+        new_index = max(0, min(new_index, 20))
+        self.set_joint_index(new_index)
         
     def init_sliders(self):
         if self.window.panel_sliders is not None:
@@ -579,13 +587,10 @@ class pose_annotation_app:
         # 數字鍵 1~9 → index 1~9
         for i in range(1, 10):
             self.window.bind(str(i), lambda e, idx=i: self.set_joint_index(idx))
-
         # 鍵 '0' → index 10
         self.window.bind("0", lambda e: self.set_joint_index(10))
-
         # 鍵 '`'（位於1左邊） → index 0
         self.window.bind("`", lambda e: self.set_joint_index(0))
-
         # 鍵 QWERTYUIOP → index 11~20
         key_to_index = {
             "q": 11, "w": 12, "e": 13, "r": 14, "t": 15,
@@ -594,6 +599,11 @@ class pose_annotation_app:
         for key, idx in key_to_index.items():
             self.window.bind(key, lambda e, i=idx: self.set_joint_index(i))
             self.window.bind(key.upper(), lambda e, i=idx: self.set_joint_index(i))  # 支援大寫
+        # ==== 新增：空白鍵 & 左右方向鍵 ====
+        self.window.bind("<space>", lambda e: self.change_joint_index(+1))   # 空白鍵 = 下一個
+        self.window.bind("<Right>", lambda e: self.change_joint_index(+1))   # 右鍵 = 下一個
+        self.window.bind("<Left>", lambda e: self.change_joint_index(-1))    # 左鍵 = 上一個
+
         self.window.canvas.pack(fill=tk.X,)
     
     def init_buttons(self):
@@ -1599,4 +1609,5 @@ if __name__ == '__main__':
 
     #     # 儲存結果
     #     app.button_save_callback()
+
 
