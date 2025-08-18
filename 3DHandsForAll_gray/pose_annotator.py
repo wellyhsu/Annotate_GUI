@@ -731,9 +731,72 @@ class pose_annotation_app:
         self.kpts_global_project_tool = kpts_global_projector('mano_hand')
         
     # Utility functions
+    # def get_rendered_img(self):
+    #     # 負責渲染並回傳一張包含 2D 關鍵點的手部影像
+    #     return self.mano_fit_tool.get_rendered_img()
     def get_rendered_img(self):
-        # 負責渲染並回傳一張包含 2D 關鍵點的手部影像
-        return self.mano_fit_tool.get_rendered_img()
+        """
+        僅顯示 keypoints 與 skeleton，不顯示 mesh。
+        會回傳一張大小為 IMG_SIZE 的 3 通道影像。
+        """
+        HAND_SKELETON_EDGES = params.limbSeq_hand
+        canvas = np.zeros((params.IMG_SIZE, params.IMG_SIZE, 3), dtype=np.uint8)
+
+        # 從 MANO 工具拿目前的 2D 關鍵點（global 座標，格式同既有程式用法）
+        try:
+            kpts_2d = np.array(self.mano_fit_tool.get_kpts_2d_glob(), dtype=np.int32)
+        except Exception:
+            kpts_2d = None
+
+        # 若尚未有 keypoints，就回傳空畫布（灰底也可：canvas.fill(128)）
+        if kpts_2d is None or kpts_2d.shape[0] < 21:
+            # 若你想用灰底：
+            # canvas[:] = 128
+            return canvas
+
+        # 以「彩色手指」方式繪製 skeleton + keypoints（BGR 顏色）
+        fingers = [
+            [0, 1, 2, 3, 4],      # 拇指
+            [0, 5, 6, 7, 8],      # 食指
+            [0, 9, 10, 11, 12],   # 中指
+            [0, 13, 14, 15, 16],  # 無名指
+            [0, 17, 18, 19, 20]   # 小指
+        ]
+        finger_colors = [
+            (0, 0, 255),     # 拇指：紅
+            (0, 165, 255),   # 食指：橙
+            (0, 255, 255),   # 中指：黃
+            (0, 255, 0),     # 無名指：綠
+            (255, 0, 0)      # 小指：藍
+        ]
+
+        # 0 號點（手腕）白色
+        r0, c0 = int(kpts_2d[0, 0]), int(kpts_2d[0, 1])
+        cv2.circle(canvas, (c0, r0), 3, (255, 255, 255), -1)
+
+        # 逐指畫線與關節點
+        for fi, finger in enumerate(fingers):
+            color = finger_colors[fi]
+            for i in range(1, len(finger)):
+                a, b = finger[i - 1], finger[i]
+                ra, ca = int(kpts_2d[a, 0]), int(kpts_2d[a, 1])
+                rb, cb = int(kpts_2d[b, 0]), int(kpts_2d[b, 1])
+                cv2.line(canvas, (ca, ra), (cb, rb), color, 2, cv2.LINE_AA)
+                cv2.circle(canvas, (cb, rb), 4, color, -1)
+
+        # 掌心骨架：0 連到 1/5/9/13/17（顏色沿用各指顏色）
+        palm_connections = [1, 5, 9, 13, 17]
+        for j, idx in enumerate(palm_connections):
+            color = finger_colors[j]
+            rb, cb = int(kpts_2d[idx, 0]), int(kpts_2d[idx, 1])
+            cv2.line(canvas, (c0, r0), (cb, rb), color, 1, cv2.LINE_AA)
+
+        # 若要顯示編號可打開：
+        for i, (r, c) in enumerate(kpts_2d):
+            cv2.putText(canvas, f'{i}', (int(c)+3, int(r)-3),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255,255,255), 1, cv2.LINE_AA)
+
+        return canvas
     
     def in_img_left_range(self, row, col):
         if (row >= params.IMG_PADDING and row < params.IMG_SIZE + params.IMG_PADDING) and \
@@ -1598,4 +1661,5 @@ if __name__ == '__main__':
 
     #     # 儲存結果
     #     app.button_save_callback()
+
 
