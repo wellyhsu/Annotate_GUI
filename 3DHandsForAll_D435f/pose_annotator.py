@@ -259,18 +259,22 @@ class pose_annotation_app:
         self.update_slider_values()
         self.update_img_display()      
 
+    def on_key_left(self, event):
+        current = self.window.slider_joint.get()
+        if current > 0:
+            self.window.slider_joint.set(current - 1)
+            self.on_trackbar_joint(current - 1)
+
+    def on_key_right(self, event):
+        current = self.window.slider_joint.get()
+        if current < 20:  # 假設最大值是 20
+            self.window.slider_joint.set(current + 1)
+            self.on_trackbar_joint(current + 1)
+
     def set_joint_index(self, index):
         print(f"切換到關節點：{index}")
         self.window.slider_joint.set(index)
         self.on_trackbar_joint(index)
-
-    def change_joint_index(self, delta):
-        """相對切換關節點 (限制在 0~20 之間)"""
-        current_index = int(self.window.slider_joint.get())
-        new_index = current_index + delta
-        # 限制在 [0, 20]
-        new_index = max(0, min(new_index, 20))
-        self.set_joint_index(new_index)
         
     def init_sliders(self):
         if self.window.panel_sliders is not None:
@@ -599,11 +603,10 @@ class pose_annotation_app:
         for key, idx in key_to_index.items():
             self.window.bind(key, lambda e, i=idx: self.set_joint_index(i))
             self.window.bind(key.upper(), lambda e, i=idx: self.set_joint_index(i))  # 支援大寫
-        # ==== 新增：空白鍵 & 左右方向鍵 ====
-        self.window.bind("<space>", lambda e: self.change_joint_index(+1))   # 空白鍵 = 下一個
-        self.window.bind("<Right>", lambda e: self.change_joint_index(+1))   # 右鍵 = 下一個
-        self.window.bind("<Left>", lambda e: self.change_joint_index(-1))    # 左鍵 = 上一個
-
+        # ★ 新增：空白鍵 / 左右方向鍵 切換關節編號
+        self.window.bind('<space>', self.on_key_right)
+        self.window.bind('<Right>', self.on_key_right)
+        self.window.bind('<Left>',  self.on_key_left)
         self.window.canvas.pack(fill=tk.X,)
     
     def init_buttons(self):
@@ -1672,6 +1675,7 @@ if __name__ == '__main__':
 
     #     # 儲存結果
     #     app.button_save_callback()
+
 
 
 
