@@ -259,10 +259,34 @@ class pose_annotation_app:
         self.update_slider_values()
         self.update_img_display() 
 
-    def set_joint_index(self, index):
-        print(f"切換到關節點：{index}")
-        self.window.slider_joint.set(index)
-        self.on_trackbar_joint(index)
+    def set_joint_index(self, idx, announce=True):
+        """直接設定目前關節編號，並做範圍夾住（0..NUM_KPTS-1，不再環狀）"""
+        try:
+            idx = int(idx)
+        except Exception:
+            return
+        # 夾住到 [0, 20]（假設 params.NUM_KPTS=21）
+        idx = max(0, min(idx, params.NUM_KPTS - 1))
+        self.joint_selected = idx
+        if announce and getattr(self, "is_debugging", False):
+            print(f'Joint {self.joint_selected} selected')
+    
+    def offset_joint_index(self, delta):
+        """以位移量調整目前關節編號（夾住而非環狀）"""
+        new_idx = self.joint_selected + int(delta)
+        self.set_joint_index(new_idx, announce=True)
+    
+    def key_next_joint(self, event=None):
+        """空白鍵／右方向鍵：+1，超過 20 就維持 20"""
+        if self.joint_selected < params.NUM_KPTS - 1:
+            self.offset_joint_index(+1)
+        return "break"   # 避免空白鍵觸發到有焦點的元件
+    
+    def key_prev_joint(self, event=None):
+        """左方向鍵：-1，小於 0 就維持 0"""
+        if self.joint_selected > 0:
+            self.offset_joint_index(-1)
+        return "break"
         
     def init_sliders(self):
         if self.window.panel_sliders is not None:
@@ -579,13 +603,10 @@ class pose_annotation_app:
         # 數字鍵 1~9 → index 1~9
         for i in range(1, 10):
             self.window.bind(str(i), lambda e, idx=i: self.set_joint_index(idx))
-
         # 鍵 '0' → index 10
         self.window.bind("0", lambda e: self.set_joint_index(10))
-
         # 鍵 '`'（位於1左邊） → index 0
         self.window.bind("`", lambda e: self.set_joint_index(0))
-
         # 鍵 QWERTYUIOP → index 11~20
         key_to_index = {
             "q": 11, "w": 12, "e": 13, "r": 14, "t": 15,
@@ -594,10 +615,14 @@ class pose_annotation_app:
         for key, idx in key_to_index.items():
             self.window.bind(key, lambda e, i=idx: self.set_joint_index(i))
             self.window.bind(key.upper(), lambda e, i=idx: self.set_joint_index(i))  # 支援大寫
+        # ★ 新增：空白鍵 / 左右方向鍵 切換關節編號
+        self.window.bind('<space>', self.key_next_joint)
+        self.window.bind('<Right>', self.key_next_joint)
+        self.window.bind('<Left>',  self.key_prev_joint)
         self.window.canvas.pack(fill=tk.X,)
-    
-    def init_buttons(self):
-        button_x_padding = params.BUTTON_X_PAD
+        
+        def init_buttons(self):
+            button_x_padding = params.BUTTON_X_PAD
         button_h, button_w = params.BUTTON_H, params.BUTTON_W
         scale_pad = params.SCALE_PAD
         
@@ -1661,5 +1686,6 @@ if __name__ == '__main__':
 
     #     # 儲存結果
     #     app.button_save_callback()
+
 
 
