@@ -13,29 +13,24 @@ import params
 import trimesh
 import glob
 import re
-from pathlib import Path
-import os
 
 def natural_key(s):
     # 將字串拆成數字與非數字部分，用於自然排序
     return [int(text) if text.isdigit() else text.lower() for text in re.split('(\d+)', s)]
 
 
-Object = 'Bowl'
 class pose_annotation_app:
     def __init__(self, args):
         self.args = args
         self.init_window()
         # Senario/Object/Sensor
-        #               /D435f_Master
-        #               /D435_Slave
+        #               /Master_D435f
+        #               /Slave_D435
         #               Senario/Object/Annotate/Sensor
-        #                                       /D435f_Master
-        #                                       /D435_Slave
-        # self.samples_dir_path = f"sample_imgs"
-        self.samples_dir_path = f"../Data/{Object}/Sensor"
-
-        print("images folder:", self.samples_dir_path)
+        #                                       /Master_D435f
+        #                                       /Slave_D435
+        self.samples_dir_path = 'sample_imgs'
+        # self.samples_dir_path = f'{Senario}/{Object}/Sensor'
         self.img_path_list = self.load_input_imgs()
         self.img_i = 0 #314# 0
         self.init_models()
@@ -179,23 +174,20 @@ class pose_annotation_app:
         parent_dir = os.path.dirname(img_path)
         parent_dir = os.path.dirname(parent_dir)   # 圖片上上一層資料夾名稱
         parent_dir = os.path.dirname(parent_dir)   # 圖片上上一層資料夾名稱
-        if self.samples_dir_path != f"sample_imgs":
-            parent_dir = os.path.dirname(parent_dir)              # 圖片上上上一層資料夾名稱
         img_basename, _ = os.path.splitext(img_filename)
 
          # 取出檔名數字（例如：'10.png' → 10）
         match = re.match(r"(\d+)", img_basename)
         img_index = int(match.group(1)) if match else -1  # 若無數字則 -1
-        print(img_path)
 
         # 嘗試尋找相同編號的 keypoint 檔案
-        pattern = os.path.join(parent_dir,"Annotate", Object, "Sensor", f"{img_basename}_kpts_2d_glob_*.npy")
+        pattern = os.path.join(parent_dir, Senario, Object, "annotate", "Sensor", f"{img_basename}_kpts_2d_glob_*.npy")
         matching_files = glob.glob(pattern)
 
         # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
         if not matching_files and img_index > 0:
             prev_basename = img_basename.replace(str(img_index), str(img_index - 1), 1)
-            fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "Sensor", f"{prev_basename}_kpts_2d_glob_*.npy")
+            fallback_pattern = os.path.join(parent_dir, Senario, Object, "annotate", "Sensor", f"{prev_basename}_kpts_2d_glob_*.npy")
             matching_files = glob.glob(fallback_pattern)
             if matching_files:
                 print(f"找不到 {img_basename} 對應的 keypoint，改用 {prev_basename}")
@@ -223,13 +215,13 @@ class pose_annotation_app:
             print("Can't find 2d keypoints")
 
         # ==== 新增：載入 3D keypoints（如有） ====
-        pattern = os.path.join(parent_dir,"Annotate", Object, "Sensor", f"{img_basename}_kpts_3d_glob_*.npy")
+        pattern = os.path.join(parent_dir, Senario, Object, "annotate", "Sensor", f"{img_basename}_kpts_3d_glob_*.npy")
         matching_files = glob.glob(pattern)
 
         # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
         if not matching_files and img_index > 0:
             prev_basename = img_basename.replace(str(img_index), str(img_index - 1), 1)
-            fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "Sensor", f"{prev_basename}_kpts_3d_glob_*.npy")
+            fallback_pattern = os.path.join(parent_dir, Senario, Object, "annotate", "Sensor", f"{prev_basename}_kpts_3d_glob_*.npy")
             matching_files = glob.glob(fallback_pattern)
             if matching_files:
                 print(f"找不到 {img_basename} 對應的 keypoint，改用 {prev_basename}")
@@ -257,25 +249,8 @@ class pose_annotation_app:
             print("Can't find 3d keypoints")            
         self.update_rendered_img()
         self.update_slider_values()
-        self.update_img_display() 
+        self.update_img_display()        
 
-    def on_key_left(self, event):
-        current = self.window.slider_joint.get()
-        if current > 0:
-            self.window.slider_joint.set(current - 1)
-            self.on_trackbar_joint(current - 1)
-
-    def on_key_right(self, event):
-        current = self.window.slider_joint.get()
-        if current < 20:  # 假設最大值是 20
-            self.window.slider_joint.set(current + 1)
-            self.on_trackbar_joint(current + 1)
-
-    def set_joint_index(self, index):
-        print(f"切換到關節點：{index}")
-        self.window.slider_joint.set(index)
-        self.on_trackbar_joint(index)
-        
     def init_sliders(self):
         if self.window.panel_sliders is not None:
             self.window.panel_sliders.pack_forget()
@@ -588,29 +563,10 @@ class pose_annotation_app:
         self.window.bind('<KeyPress-plus>', self.keyboard_zoom_in)  # 按下 + 鍵放大
         self.window.bind('<KeyPress-equal>', self.keyboard_zoom_in)  # 按下 = 鍵放大
         self.window.bind('<KeyPress-minus>', self.keyboard_zoom_out)  # 按下 - 鍵縮小
-        # 數字鍵 1~9 → index 1~9
-        for i in range(1, 10):
-            self.window.bind(str(i), lambda e, idx=i: self.set_joint_index(idx))
-        # 鍵 '0' → index 10
-        self.window.bind("0", lambda e: self.set_joint_index(10))
-        # 鍵 '`'（位於1左邊） → index 0
-        self.window.bind("`", lambda e: self.set_joint_index(0))
-        # 鍵 QWERTYUIOP → index 11~20
-        key_to_index = {
-            "q": 11, "w": 12, "e": 13, "r": 14, "t": 15,
-            "y": 16, "u": 17, "i": 18, "o": 19, "p": 20
-        }
-        for key, idx in key_to_index.items():
-            self.window.bind(key, lambda e, i=idx: self.set_joint_index(i))
-            self.window.bind(key.upper(), lambda e, i=idx: self.set_joint_index(i))  # 支援大寫
-        # ★ 新增：空白鍵 / 左右方向鍵 切換關節編號
-        self.window.bind("<Left>", self.on_key_left)
-        self.window.bind("<Right>", self.on_key_right)
-        self.window.bind("<space>", self.on_key_right)
         self.window.canvas.pack(fill=tk.X,)
-        
-        def init_buttons(self):
-            button_x_padding = params.BUTTON_X_PAD
+    
+    def init_buttons(self):
+        button_x_padding = params.BUTTON_X_PAD
         button_h, button_w = params.BUTTON_H, params.BUTTON_W
         scale_pad = params.SCALE_PAD
         
@@ -695,7 +651,7 @@ class pose_annotation_app:
                 name = k[7:]
                 new_state_dict[name] = v
             model.load_state_dict(new_state_dict)
-            self.model_2d = model.cpu()
+            self.model_2d = torch.nn.DataParallel(model, device_ids=[0]).cpu()
             self.model_2d.eval()
             print('Model 2D succesfully loaded')
             
@@ -715,7 +671,7 @@ class pose_annotation_app:
                 name = k[7:]
                 new_state_dict[name] = v
             model.load_state_dict(new_state_dict)
-            self.model_3d_3rd = model.cpu()
+            self.model_3d_3rd = torch.nn.DataParallel(model, device_ids=[0]).cpu()
             self.model_3d_3rd.eval()
             print('Model third-person 3D succesfully loaded')
             
@@ -735,7 +691,7 @@ class pose_annotation_app:
                 name = k[7:]
                 new_state_dict[name] = v
             model.load_state_dict(new_state_dict)
-            self.model_3d_ego = model.cpu()
+            self.model_3d_ego = torch.nn.DataParallel(model, device_ids=[0]).cpu()
             self.model_3d_ego.eval()
             print('Model egocentric 3D succesfully loaded')
             
@@ -747,27 +703,84 @@ class pose_annotation_app:
     # def get_rendered_img(self):
     #     # 負責渲染並回傳一張包含 2D 關鍵點的手部影像
     #     return self.mano_fit_tool.get_rendered_img()
+    def _palm_facing_camera(self, kpts_3d, is_left=False):
+        """
+        用 3D 關鍵點估計掌面方向。
+        kpts_3d: (21,3) in camera coords (原點在相機中心)
+        回傳: (is_palm, normal_vec, score)
+        """
+        p0  = kpts_3d[0]   # wrist
+        p5  = kpts_3d[5]   # index MCP
+        p9  = kpts_3d[9]   # middle MCP
+        p13 = kpts_3d[13]  # ring MCP
+        p17 = kpts_3d[17]  # pinky MCP
+
+        # 兩個掌面內向量（選跨掌的與朝中指的，穩定些）
+        v1 = p17 - p5
+        v2 = p9  - p0
+
+        n = np.cross(v1, v2)  # 掌面法向
+        if is_left:
+            n = -n            # 左手座標方向相反時翻轉
+
+        # 相機座標系下，相機在原點；由手腕看向相機的方向
+        view_dir = -p0
+        # 正規化避免尺度影響
+        def _nz(x):
+            nrm = np.linalg.norm(x) + 1e-8
+            return x / nrm
+        score = float(np.dot(_nz(n), _nz(view_dir)))  # >0: 法向朝向相機
+
+        return (score > 0.0), n, score
+
     def get_rendered_img(self):
         """
         僅顯示 keypoints 與 skeleton，不顯示 mesh。
         會回傳一張大小為 IMG_SIZE 的 3 通道影像。
         """
-        HAND_SKELETON_EDGES = params.limbSeq_hand
         canvas = np.zeros((params.IMG_SIZE, params.IMG_SIZE, 3), dtype=np.uint8)
 
-        # 從 MANO 工具拿目前的 2D 關鍵點（global 座標，格式同既有程式用法）
+        # 2D / 3D 關鍵點
         try:
-            kpts_2d = np.array(self.mano_fit_tool.get_kpts_2d_glob(), dtype=np.int32)
+            kpts_2d = np.array(self.mano_fit_tool.get_kpts_2d_glob(), dtype=np.int32)  # (row, col)
         except Exception:
             kpts_2d = None
+        try:
+            kpts_3d = np.asarray(self.mano_fit_tool.get_kpts_3d_glob(), dtype=np.float32)  # 相機座標系 (mm 或 m)
+        except Exception:
+            kpts_3d = None
 
-        # 若尚未有 keypoints，就回傳空畫布（灰底也可：canvas.fill(128)）
         if kpts_2d is None or kpts_2d.shape[0] < 21:
-            # 若你想用灰底：
-            # canvas[:] = 128
             return canvas
 
-        # 以「彩色手指」方式繪製 skeleton + keypoints（BGR 顏色）
+        # ==== 1) 掌面朝向判斷（若沒有 3D 則略過）====
+        is_palm = None
+        if kpts_3d is not None and kpts_3d.shape[0] >= 21:
+            # 你如果在別處就知道左右手，可用 self.hand_mode in ('l','r')
+            is_left = (getattr(self, "hand_mode", "r") == "l")
+            is_palm, n_vec, score = self._palm_facing_camera(kpts_3d, is_left=is_left)
+
+            # 在 2D 上用多邊形塊表示掌面（1,5,9,13,17）
+            palm_idx = np.array([0, 5, 9, 13, 17], dtype=np.int32)
+            poly = np.stack([kpts_2d[palm_idx, 1], kpts_2d[palm_idx, 0]], axis=1).astype(np.int32)  # (x,y)
+            color_palm = (250, 250, 255)   # BGR（偏暖）for PALM
+            color_back = (130, 130, 130)  # BGR（灰）for BACK
+            fill = color_palm if is_palm else color_back
+            cv2.fillConvexPoly(canvas, poly, fill)
+
+            # 標籤
+            r0, c0 = int(kpts_2d[0,0]), int(kpts_2d[0,1])
+            label  = "PALM" if is_palm else "BACK"
+            # 先算出文字尺寸與 baseline
+            margin = 10  # 與邊界的內縮距離
+            (text_w, text_h), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+            # 左上角放字：x=margin，y 要放在「基線」= margin + text_h
+            x = margin
+            y = margin + text_h
+            cv2.putText(canvas, label, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                        (255,255,255), 2, cv2.LINE_AA)
+
+        # ==== 2) 彩色手指骨架 ====
         fingers = [
             [0, 1, 2, 3, 4],      # 拇指
             [0, 5, 6, 7, 8],      # 食指
@@ -783,31 +796,55 @@ class pose_annotation_app:
             (255, 0, 0)      # 小指：藍
         ]
 
-        # 0 號點（手腕）白色
+        # 手腕 (0) 白點
         r0, c0 = int(kpts_2d[0, 0]), int(kpts_2d[0, 1])
         cv2.circle(canvas, (c0, r0), 3, (255, 255, 255), -1)
 
-        # 逐指畫線與關節點
-        for fi, finger in enumerate(fingers):
-            color = finger_colors[fi]
-            for i in range(1, len(finger)):
-                a, b = finger[i - 1], finger[i]
-                ra, ca = int(kpts_2d[a, 0]), int(kpts_2d[a, 1])
-                rb, cb = int(kpts_2d[b, 0]), int(kpts_2d[b, 1])
-                cv2.line(canvas, (ca, ra), (cb, rb), color, 2, cv2.LINE_AA)
-                cv2.circle(canvas, (cb, rb), 4, color, -1)
+        # 先計算每個關節的 3D z 值（深度）
+        z_vals = [kpts_3d[i][2] for i in range(21)]
 
-        # 掌心骨架：0 連到 1/5/9/13/17（顏色沿用各指顏色）
+        # 按照 z 值排序，從最遠到最近
+        sorted_idx = np.argsort(z_vals)
+
+        # 掌心骨架：0 連到 1/5/9/13/17
         palm_connections = [1, 5, 9, 13, 17]
         for j, idx in enumerate(palm_connections):
             color = finger_colors[j]
             rb, cb = int(kpts_2d[idx, 0]), int(kpts_2d[idx, 1])
             cv2.line(canvas, (c0, r0), (cb, rb), color, 1, cv2.LINE_AA)
 
-        # 若要顯示編號可打開：
-        for i, (r, c) in enumerate(kpts_2d):
-            cv2.putText(canvas, f'{i}', (int(c)+3, int(r)-3),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255,255,255), 1, cv2.LINE_AA)
+        # 逐指畫線 + 點；依照深度從遠到近
+        for fi, finger in enumerate(fingers):
+            base_color = finger_colors[fi]
+            for i in range(1, len(finger)):
+                a, b = finger[i-1], finger[i]
+                ra, ca = int(kpts_2d[a,0]), int(kpts_2d[a,1])
+                rb, cb = int(kpts_2d[b,0]), int(kpts_2d[b,1])
+
+                thickness = 2
+                color = base_color
+                # 根據 3D 判斷邊是否在掌面後方（相對掌面）
+                if is_palm is not None:
+                    # 掌面平面：用 0,5,9,13,17 做 least-squares；這裡簡化用法向 n_vec 與 wrist p0
+                    p0 = kpts_3d[0]
+                    za = np.dot(kpts_3d[a] - p0, n_vec)
+                    zb = np.dot(kpts_3d[b] - p0, n_vec)
+                    # 若兩端都在掌面「反向」一側，就把線畫淡一點
+                    if (za < 0 and zb < 0) if is_palm else (za > 0 and zb > 0):
+                        color = tuple(int(0.5*x + 0.5*200) for x in base_color)  # 變淡
+                        thickness = 1
+                        # 使手背骨架虛線顯示
+                        cv2.line(canvas, (ca, ra), (cb, rb), color, thickness, cv2.LINE_AA)
+                    else:
+                        # 其餘畫實線
+                        cv2.line(canvas, (ca, ra), (cb, rb), base_color, thickness, cv2.LINE_AA)
+
+                cv2.circle(canvas, (cb, rb), 4, base_color, -1)
+
+            # （可留著）顯示編號
+            for i, (r, c) in enumerate(kpts_2d):
+                cv2.putText(canvas, f'{i}', (int(c)+3, int(r)-3),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255,255,255), 1, cv2.LINE_AA)
 
         return canvas
     
@@ -1211,9 +1248,9 @@ class pose_annotation_app:
                     
                     kpts_2d.append((y_scaled, x_scaled))
                     confidences.append(confidence)
-                # # 印出每個關鍵點的信心值
-                # for i, (coord, conf) in enumerate(zip(kpts_2d, confidences)):
-                #     print(f"2D Keypoint {i}, Confidence = {conf:.4f}")
+                # 印出每個關鍵點的信心值
+                for i, (coord, conf) in enumerate(zip(kpts_2d, confidences)):
+                    print(f"2D Keypoint {i}, Confidence = {conf:.4f}")
                 
                 # 💾 Save confidences as .npy file
                 confidences_np = np.array(confidences, dtype=np.float32)
@@ -1342,30 +1379,21 @@ class pose_annotation_app:
         # Senario/Object/Master_D435f/RGB
         # Senario/Object/Slave_D435/RGB
         img_path = self.img_path_list[self.img_i]  # 原始圖片完整路徑
-        img_path = Path(img_path)
-        img_path_abs = os.path.abspath(img_path)
-        img_dir  = os.path.dirname(img_path_abs)                  # 圖片當前資料夾名稱
-        
+        img_path = os.path.abspath(img_path)
+        img_dir  = os.path.dirname(img_path)                  # 圖片當前資料夾名稱
+        # print(img_dir)
         parent_dir = os.path.dirname(img_dir)                 # 圖片上一層資料夾名稱
         parent_dir = os.path.dirname(parent_dir)              # 圖片上上一層資料夾名稱
-        if self.samples_dir_path != f"sample_imgs":
-            parent_dir = os.path.dirname(parent_dir)              # 圖片上上上一層資料夾名稱
-        print(parent_dir)
-        save_dir = os.path.join(parent_dir,"Annotate", Object, "Sensor")  # 設置annotate資料夾路徑
+        save_dir = os.path.join(parent_dir, Senario, Object, "annotate", "Sensor")  # 設置annotate資料夾路徑
         os.makedirs(save_dir, exist_ok=True)     # 若不存在就建立
 
         img_base, ext = os.path.splitext(os.path.basename(img_path)) # 將檔名與附檔名分開
 
         # === 2. 取得 MANO / 關鍵點等資料 ===
         mano_save_np = self.mano_fit_tool.get_mano()
-        np.save(os.path.join(save_dir, f"{img_base}_mano_{self.args.hand_mode}.npy"), mano_save_np)
-        print("img_path: ", img_path)
-        img = cv2.imread(str(img_path))
-        if img is None:
-            print(f"Failed to load image: {img_path}")
-        else:
-            print(f"Image loaded with shape: {img.shape}")
-
+        # np.save(os.path.join(save_dir, f"{img_base}_mano_{self.args.hand_mode}.npy"), mano_save_np)
+       
+        img = cv2.imread(img_path)
         height, width = img.shape[:2]
         print(f"Image size: width={width}, height={height}")
 
@@ -1674,7 +1702,6 @@ if __name__ == '__main__':
 
     #     # 儲存結果
     #     app.button_save_callback()
-
 
 
 
