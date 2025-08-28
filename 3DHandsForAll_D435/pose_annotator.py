@@ -15,12 +15,13 @@ import glob
 import re
 from pathlib import Path
 import os
+from scipy.spatial import ConvexHull
 
 def natural_key(s):
     # 將字串拆成數字與非數字部分，用於自然排序
     return [int(text) if text.isdigit() else text.lower() for text in re.split('(\d+)', s)]
 
-Object = 'Stirrer'
+Object = 'Box'
 class pose_annotation_app:
     def __init__(self, args):
         self.args = args
@@ -747,6 +748,89 @@ class pose_annotation_app:
     # def get_rendered_img(self):
     #     # 負責渲染並回傳一張包含 2D 關鍵點的手部影像
     #     return self.mano_fit_tool.get_rendered_img()
+    def _get_camera_K(self):
+        """
+        取得 3x3 內參矩陣。優先使用 mano_fit_tool 的 getter/屬性；
+        若沒有，退回用 IMG_SIZE 與 args.{fx,fy,cx,cy} 建立。
+        """
+        K = np.array([
+            [374.56138803, 0, 196.61636169],
+            [0, 374.99122761, 209.00920516],
+            [0,0,1]
+        ])
+        # if hasattr(self.mano_fit_tool, "get_intrinsics"):
+        #     K = np.asarray(self.mano_fit_tool.get_intrinsics(), dtype=np.float32)
+        # elif hasattr(self.mano_fit_tool, "K"):
+        #     K = np.asarray(self.mano_fit_tool.K, dtype=np.float32)
+        # if K is None or K.shape != (3, 3):
+        #     fx = getattr(self.args, "fx", 1000.0)
+        #     fy = getattr(self.args, "fy", 1000.0)
+        #     cx = getattr(self.args, "cx", params.IMG_SIZE/2)
+        #     cy = getattr(self.args, "cy", params.IMG_SIZE/2)
+        #     K = np.array([[fx, 0, cx],
+        #                 [0, fy, cy],
+        #                 [0,  0,  1]], dtype=np.float32)
+        return K
+
+    @staticmethod
+    def _project_points_pinhole(pts3d, K):
+        """
+        3D->2D 透視投影（像素座標）。pts3d: (N,3) 相機座標
+        """
+        pts3d = np.asarray(pts3d, dtype=np.float32)
+        X, Y, Z = pts3d[:,0], pts3d[:,1], pts3d[:,2]
+        Zc = np.maximum(Z, 1e-9)
+        fx, fy, cx, cy = K[0,0], K[1,1], K[0,2], K[1,2]
+        u = fx*(X/Zc) + cx
+        v = fy*(Y/Zc) + cy
+        return np.stack([u, v], axis=-1)
+
+    @staticmethod
+    def _alpha_blend(dst, src, alpha):
+        """
+        將 src 以 alpha 疊到 dst 上（uint8）。
+        """
+        cv2.addWeighted(src, float(alpha), dst, 1.0 - float(alpha), 0, dst)
+
+    def _draw_mesh_overlay(self, canvas, verts, faces, K,
+                        face_color=(210,210,255), face_alpha=0.35,
+                        edge_color=(90,90,160), edge_thickness=1,
+                        cull_backfaces=False):
+        """
+        在 canvas 上以「畫家算法」把三角面由遠到近畫上去（半透明＋邊線）。
+        verts: (V,3) 相機座標；faces: (F,3) int32（0-based）
+        """
+        verts = np.asarray(verts, dtype=np.float32)
+        faces = np.asarray(faces, dtype=np.int32)
+
+        uv = self._project_points_pinhole(verts, K)  # (V,2)
+        z  = verts[:,2]
+
+        # 只畫 Z>0 的面；用平均 Z 做遠近排序（遠→近）
+        valid = np.all(z[faces] > 1e-6, axis=1)
+        faces_v = faces[valid]
+        if faces_v.size == 0:
+            return canvas
+        depth = z[faces_v].mean(axis=1)
+        order = np.argsort(depth)[::-1]  # 遠先畫
+        faces_sorted = faces_v[order]
+
+        overlay = canvas.copy()
+
+        def _front_face(f3):
+            a, b, c = uv[f3[0]], uv[f3[1]], uv[f3[2]]
+            # 2D 有向面積（螢幕座標）：符號可當作面朝向的近似
+            return ((b[0]-a[0])*(c[1]-a[1]) - (b[1]-a[1])*(c[0]-a[0])) < 0
+
+        for f in faces_sorted:
+            if cull_backfaces and (not _front_face(f)):
+                continue
+            poly = uv[f].astype(np.int32)
+            cv2.fillConvexPoly(overlay, poly, face_color)
+            cv2.polylines(overlay, [poly], isClosed=True, color=edge_color, thickness=edge_thickness)
+
+        self._alpha_blend(canvas, overlay, face_alpha)
+        return canvas
     def _palm_facing_camera(self, kpts_3d, is_left=False):
         """
         用 3D 關鍵點估計掌面方向。
@@ -794,8 +878,30 @@ class pose_annotation_app:
         except Exception:
             kpts_3d = None
 
+        try:
+            verts = self.mano_fit_tool.get_hand_verts()  # torch.Tensor (778,3) or (1,778,3)
+            verts_np = verts.detach().cpu().numpy()
+            if verts_np.ndim == 3 and verts_np.shape[0] == 1:
+                verts_np = verts_np[0]  # -> (778,3)
+
+            faces = self.mano_fit_tool.mano_model.mano_layer.th_faces  # torch.LongTensor (1538,3)
+            faces = faces.detach().cpu().numpy().astype(np.int32)      # 0-based
+
+            K = self._get_camera_K()  # 3x3 內參
+
+            # 若 verts_np 不是相機座標，請先做外參變換；此處假設已是相機座標
+            canvas = self._draw_mesh_overlay(
+                canvas, verts_np, faces, K,
+                face_color=(255,255,255), face_alpha=0.65,
+                edge_color=(190,190,190), edge_thickness=1,
+                cull_backfaces=False
+            )
+        except Exception:
+            pass  # 取不到 mesh 就略過，但不影響後續骨架/掌面顯示
+
         if kpts_2d is None or kpts_2d.shape[0] < 21:
             return canvas
+
 
         # ==== 1) 掌面朝向判斷（若沒有 3D 則略過）====
         is_palm = None
