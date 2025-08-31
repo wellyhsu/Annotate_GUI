@@ -758,18 +758,6 @@ class pose_annotation_app:
             [0, 374.99122761, 209.00920516],
             [0,0,1]
         ])
-        # if hasattr(self.mano_fit_tool, "get_intrinsics"):
-        #     K = np.asarray(self.mano_fit_tool.get_intrinsics(), dtype=np.float32)
-        # elif hasattr(self.mano_fit_tool, "K"):
-        #     K = np.asarray(self.mano_fit_tool.K, dtype=np.float32)
-        # if K is None or K.shape != (3, 3):
-        #     fx = getattr(self.args, "fx", 1000.0)
-        #     fy = getattr(self.args, "fy", 1000.0)
-        #     cx = getattr(self.args, "cx", params.IMG_SIZE/2)
-        #     cy = getattr(self.args, "cy", params.IMG_SIZE/2)
-        #     K = np.array([[fx, 0, cx],
-        #                 [0, fy, cy],
-        #                 [0,  0,  1]], dtype=np.float32)
         return K
 
     @staticmethod
