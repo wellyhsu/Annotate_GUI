@@ -28,12 +28,12 @@ class pose_annotation_app:
         self.init_window()
         # Senario/Object/Sensor
         #               /D435f_Master
-        #               /D435_Slave
+        #               /D435_slave
         #               Senario/Object/Annotate/Sensor
         #                                       /D435f_Master
-        #                                       /D435_Slave
+        #                                       /D435_slave
         # self.samples_dir_path = f"sample_imgs"
-        self.samples_dir_path = f"../Data/{Object}/D435_Slave/RGB"
+        self.samples_dir_path = f"../Data/{Object}/D435_slave/RGB"
 
         print("images folder:", self.samples_dir_path)
         self.img_path_list = self.load_input_imgs()
@@ -1865,4 +1865,5 @@ if __name__ == '__main__':
 
     #     # 儲存結果
     #     app.button_save_callback()
+
 
