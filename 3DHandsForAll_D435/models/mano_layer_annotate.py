@@ -39,8 +39,10 @@ class Model(nn.Module):
         self.img_center_size = 200
         self.batch_size = batch_size
 
-        # Master D435f
-        self.K = torch.tensor([[380.75828375, 0, 202.03685067],[0, 378.17469921, 198.03685067],[0,0,1]], \
+        # Slave D435
+        self.K = torch.tensor([ [374.561, 0.0, 196.616],
+                                [0.0, 374.991, 158.996],
+                                [0.0, 0.0, 1.0]], \
             dtype=torch.float32).cpu()
 
         self.kpts_2d_idx_set = set()
