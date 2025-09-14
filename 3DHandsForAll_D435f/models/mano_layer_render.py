@@ -40,7 +40,9 @@ class Model(nn.Module):
         self.batch_size = batch_size
 
         # Master D435f
-        self.K = torch.tensor([[380.75828375, 0, 202.03685067],[0, 378.17469921, 198.03685067],[0,0,1]], \
+        self.K = torch.tensor([[379.496, 0.0, 206.150],
+                                [0.0, 378.838, 152.321],
+                                [0.0, 0.0, 1.0]], \
             dtype=torch.float32).cpu()
 
         self.xyz_root = torch.tensor([0.0, 0.0, 50.0], dtype=torch.float32).cpu().repeat(self.batch_size, 1)
