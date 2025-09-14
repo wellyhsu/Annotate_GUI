@@ -14,24 +14,22 @@ import trimesh
 import glob
 import re
 from pathlib import Path
-import os
-from scipy.spatial import ConvexHull
 
 def natural_key(s):
     # 將字串拆成數字與非數字部分，用於自然排序
     return [int(text) if text.isdigit() else text.lower() for text in re.split('(\d+)', s)]
-
-Object = 'Box'
+Subsample = 2
+Object = "Night_light"
 class pose_annotation_app:
     def __init__(self, args):
         self.args = args
         self.init_window()
         # Senario/Object/Sensor
         #               /D435f_Master
-        #               /D435_slave
+        #               /D435_Slave
         #               Senario/Object/Annotate/Sensor
         #                                       /D435f_Master
-        #                                       /D435_slave
+        #                                       /D435_Slave
         # self.samples_dir_path = f"sample_imgs"
         self.samples_dir_path = f"../Data/{Object}/D435_slave/RGB"
 
@@ -196,7 +194,8 @@ class pose_annotation_app:
 
         # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
         if not matching_files and img_index > 0:
-            prev_basename = img_basename.replace(str(img_index), str(img_index - 1), 1)
+            prev_basename = img_basename.replace(str(img_index), str(img_index - Subsample), 1)
+            prev_basename = prev_basename.zfill(8)
             fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "D435_Slave", f"{prev_basename}_kpts_2d_glob_*.npy")
             matching_files = glob.glob(fallback_pattern)
             if matching_files:
@@ -230,7 +229,8 @@ class pose_annotation_app:
 
         # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
         if not matching_files and img_index > 0:
-            prev_basename = img_basename.replace(str(img_index), str(img_index - 1), 1)
+            prev_basename = img_basename.replace(str(img_index), str(img_index - Subsample), 1)
+            prev_basename = prev_basename.zfill(8)
             fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "D435_Slave", f"{prev_basename}_kpts_3d_glob_*.npy")
             matching_files = glob.glob(fallback_pattern)
             if matching_files:
@@ -1513,13 +1513,13 @@ class pose_annotation_app:
                 self.update_slider_values()
         
     def button_prev_callback(self):
-        self.img_i -= 1
+        self.img_i -= Subsample
         if self.img_i < 0:
             self.img_i = 0
         self.init_ui()
         
     def button_next_callback(self):
-        self.img_i += 1
+        self.img_i += Subsample
         if self.img_i >= len(self.img_path_list):
             print('Annotation finished.')
             sys.exit()
@@ -1865,5 +1865,3 @@ if __name__ == '__main__':
 
     #     # 儲存結果
     #     app.button_save_callback()
-
-
