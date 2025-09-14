@@ -19,24 +19,24 @@ import os
 def natural_key(s):
     # 將字串拆成數字與非數字部分，用於自然排序
     return [int(text) if text.isdigit() else text.lower() for text in re.split('(\d+)', s)]
-
-Object = 'Bowl'
+Subsample = 2
+Object = 'Box'
 class pose_annotation_app:
     def __init__(self, args):
         self.args = args
         self.init_window()
         # Senario/Object/Sensor
         #               /D435f_Master
-        #               /D435_slave
+        #               /D435_Slave
         #               Senario/Object/Annotate/Sensor
         #                                       /D435f_Master
-        #                                       /D435_slave
+        #                                       /D435_Slave
         # self.samples_dir_path = f"sample_imgs"
         self.samples_dir_path = f"../Data/{Object}/D435f_Master/RGB"
 
         print("images folder:", self.samples_dir_path)
         self.img_path_list = self.load_input_imgs()
-        self.img_i = 0 #314# 0
+        self.img_i = 9 #314# 0
         self.init_models()
         self.init_ui()
         
@@ -194,7 +194,8 @@ class pose_annotation_app:
 
         # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
         if not matching_files and img_index > 0:
-            prev_basename = img_basename.replace(str(img_index), str(img_index - 1), 1)
+            prev_basename = img_basename.replace(str(img_index), str(img_index - Subsample), 1)
+            prev_basename = prev_basename.zfill(8)
             fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "D435f_Master", f"{prev_basename}_kpts_2d_glob_*.npy")
             matching_files = glob.glob(fallback_pattern)
             if matching_files:
@@ -228,7 +229,8 @@ class pose_annotation_app:
 
         # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
         if not matching_files and img_index > 0:
-            prev_basename = img_basename.replace(str(img_index), str(img_index - 1), 1)
+            prev_basename = img_basename.replace(str(img_index), str(img_index - Subsample), 1)
+            prev_basename = prev_basename.zfill(8)
             fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "D435f_Master", f"{prev_basename}_kpts_3d_glob_*.npy")
             matching_files = glob.glob(fallback_pattern)
             if matching_files:
@@ -905,6 +907,18 @@ class pose_annotation_app:
             cv2.fillConvexPoly(canvas, poly, fill)
 
             # 標籤
+            img_path = self.img_path_list[self.img_i]
+            img_dir, img_filename = os.path.split(img_path)
+            img_basename, _ = os.path.splitext(img_filename)
+            # 先算出文字尺寸與 baseline
+            margin = 300  # 與邊界的內縮距離
+            (text_w, text_h), baseline = cv2.getTextSize(img_basename, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+            # 左上角放字：x=margin，y 要放在「基線」= margin + text_h
+            x = margin
+            y = 10 + text_h
+            cv2.putText(canvas, img_basename, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                        (255,255,255), 2, cv2.LINE_AA)
+                        
             r0, c0 = int(kpts_2d[0,0]), int(kpts_2d[0,1])
             label  = "PALM" if is_palm else "BACK"
             # 先算出文字尺寸與 baseline
@@ -1496,13 +1510,13 @@ class pose_annotation_app:
                 self.update_slider_values()
         
     def button_prev_callback(self):
-        self.img_i -= 1
+        self.img_i -= Subsample
         if self.img_i < 0:
             self.img_i = 0
         self.init_ui()
         
     def button_next_callback(self):
-        self.img_i += 1
+        self.img_i += Subsample
         if self.img_i >= len(self.img_path_list):
             print('Annotation finished.')
             sys.exit()
@@ -1848,5 +1862,3 @@ if __name__ == '__main__':
 
     #     # 儲存結果
     #     app.button_save_callback()
-
-
