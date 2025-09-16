@@ -38,13 +38,20 @@ class Model(nn.Module):
             joint_rot_mode="axisang").cpu()
         self.img_center_size = 200
         self.batch_size = batch_size
-
+      
+        # 假設的相機內參數
+        # self.K = torch.tensor([[357, 0, self.img_center_size],[0, 357, self.img_center_size],[0,0,1]], \
+        #     dtype=torch.float32).cpu()
+        # # Slave D435
+        # self.K = torch.tensor([[374.56138803, 0, 196.61636169],[0, 374.99122761, 209.00920516],[0,0,1]], \
+        #     dtype=torch.float32).cpu()
         # Master D435f
-        self.K = torch.tensor([[379.496, 0.0, 206.150],
-                                [0.0, 378.838, 152.321],
-                                [0.0, 0.0, 1.0]], \
+        self.K = torch.tensor([[380.75828375, 0, 192.03685067],[0, 378.17469921, 210.16451343],[0,0,1]], \
             dtype=torch.float32).cpu()
-
+        # # gray
+        # self.K = torch.tensor([[123.0595780, 0, 75.48645649],[0, 124.41147697, 53.17868488],[0,0,1]], \
+        #     dtype=torch.float32).cpu() 
+      
         self.xyz_root = torch.tensor([0.0, 0.0, 50.0], dtype=torch.float32).cpu().repeat(self.batch_size, 1)
         self.input_pose = torch.zeros(self.batch_size, 48).cpu()
         self.input_shape = torch.zeros(self.batch_size, 10).cpu()
