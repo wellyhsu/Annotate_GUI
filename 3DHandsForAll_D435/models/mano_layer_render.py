@@ -41,7 +41,7 @@ class Model(nn.Module):
 
         # Slave D435
         self.K = torch.tensor([ [374.561, 0.0, 196.616],
-                                [0.0, 374.991, 158.996],
+                                [0.0, 374.991, 211.995],
                                 [0.0, 0.0, 1.0]], \
             dtype=torch.float32).cpu()
 
