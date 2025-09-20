@@ -50,6 +50,7 @@ class pose_annotation_app:
         self.init_kpts_projector()
         
     def init_variables(self):
+        self.Clear=False
         self.mano_fit_tool = mano_wrapper.mano_fitter(params.MANO_PATH, is_annotating = True)
         self.mano_fit_tool.set_input_size(params.IMG_SIZE)
         self.img_left, self.img_center, self.img_right = None, None, None
@@ -223,18 +224,40 @@ class pose_annotation_app:
         else:
             print("Can't find 2d keypoints")
 
-        # ==== 新增：載入 3D keypoints（如有） ====
+        # ==== 載入 MANO 參數（優先） ====
+        mano_pattern = os.path.join(parent_dir, "Annotate", Object, "D435f_Master", f"{img_basename}_mano_*.npy")
+        matching_mano_files = glob.glob(mano_pattern)
+
+        if self.Clear == False:
+            # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
+            if not matching_mano_files and img_index > 0:
+                prev_basename = img_basename.replace(str(img_index), str(img_index - Subsample), 1)
+                prev_basename = prev_basename.zfill(8)
+                fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "D435f_Master", f"{prev_basename}_mano_*.npy")
+                matching_mano_files = glob.glob(fallback_pattern)
+                if matching_mano_files:
+                    print(f"找不到 {img_basename} 對應的 MANO mesh，改用 {prev_basename}")
+
+        if matching_mano_files:
+            mano_param_path = matching_mano_files[0]
+            self.mano_info_loaded = np.load(mano_param_path, allow_pickle=True)
+            print(f"Loaded MANO params from {mano_param_path}")
+            root_idx = 0   # 或 9，看你的資料
+            self.mano_fit_tool.set_mano(self.mano_info_loaded, root_idx=root_idx)
+        else:
+            # ==== 載入 3D keypoints（若沒有 MANO 檔案才用 3D kpts 擬合）====
         pattern = os.path.join(parent_dir,"Annotate", Object, "D435f_Master", f"{img_basename}_kpts_3d_glob_*.npy")
         matching_files = glob.glob(pattern)
 
-        # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
-        if not matching_files and img_index > 0:
-            prev_basename = img_basename.replace(str(img_index), str(img_index - Subsample), 1)
-            prev_basename = prev_basename.zfill(8)
-            fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "D435f_Master", f"{prev_basename}_kpts_3d_glob_*.npy")
-            matching_files = glob.glob(fallback_pattern)
-            if matching_files:
-                print(f"找不到 {img_basename} 對應的 keypoint，改用 {prev_basename}")
+        if self.Clear == False:
+            # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
+            if not matching_files and img_index > 0:
+                prev_basename = img_basename.replace(str(img_index), str(img_index - Subsample), 1)
+                prev_basename = prev_basename.zfill(8)
+                fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "D435f_Master", f"{prev_basename}_kpts_3d_glob_*.npy")
+                matching_files = glob.glob(fallback_pattern)
+                if matching_files:
+                    print(f"找不到 {img_basename} 對應的 keypoint，改用 {prev_basename}")
 
         if matching_files:
             kpt3d_path = matching_files[0]  # 只取第一個符合的檔案
@@ -1624,6 +1647,12 @@ class pose_annotation_app:
         
     def button_reset_callback(self):
         self.init_variables()
+        # ==== 新增：清除所有關節點 ====
+        self.joint_anno_dict_l.clear()
+        self.joint_anno_dict_r.clear()
+        self.mano_fit_tool.reset_parameters(keep_mano=False)  # 完全重置，不保留上次的狀態
+        self.Clear = True
+        print("All keypoints cleared.")
         self.init_frame_info()
             
     def on_trackbar_mano_rot0(self, val):
@@ -1862,3 +1891,4 @@ if __name__ == '__main__':
 
     #     # 儲存結果
     #     app.button_save_callback()
+
