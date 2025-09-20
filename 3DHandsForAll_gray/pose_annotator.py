@@ -21,7 +21,7 @@ def natural_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split('(\d+)', s)]
 
 Subsample = 2
-Object = 'Box'
+Object = 'Calendar'
 class pose_annotation_app:
     def __init__(self, args):
         self.args = args
@@ -37,7 +37,7 @@ class pose_annotation_app:
 
         print("images folder:", self.samples_dir_path)
         self.img_path_list = self.load_input_imgs()
-        self.img_i = 0 #314# 0
+        self.img_i = 102 #314# 0
         self.init_models()
         self.init_ui()
         
@@ -51,6 +51,7 @@ class pose_annotation_app:
         self.init_kpts_projector()
         
     def init_variables(self):
+        self.Clear=False
         self.mano_fit_tool = mano_wrapper.mano_fitter(params.MANO_PATH, is_annotating = True)
         self.mano_fit_tool.set_input_size(params.IMG_SIZE)
         self.img_left, self.img_center, self.img_right = None, None, None
@@ -194,14 +195,15 @@ class pose_annotation_app:
         print(img_basename)
         print(matching_files)
 
-        # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
-        if not matching_files and img_index > 0:
-            prev_basename = img_basename.replace(str(img_index), str(img_index - Subsample), 1)
-            prev_basename = prev_basename.zfill(8)
-            fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "Sensor", f"{prev_basename}_kpts_2d_glob_*.npy")
-            matching_files = glob.glob(fallback_pattern)
-            if matching_files:
-                print(f"找不到 {img_basename} 對應的 keypoint，改用 {prev_basename}")
+        if self.Clear == False:
+            # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
+            if not matching_files and img_index > 0:
+                prev_basename = img_basename.replace(str(img_index), str(img_index - Subsample), 1)
+                prev_basename = prev_basename.zfill(8)
+                fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "Sensor", f"{prev_basename}_kpts_2d_glob_*.npy")
+                matching_files = glob.glob(fallback_pattern)
+                if matching_files:
+                    print(f"找不到 {img_basename} 對應的 keypoint，改用 {prev_basename}")
 
 
         # ==== 新增：載入 2D keypoints 並繪製 ====
@@ -228,6 +230,16 @@ class pose_annotation_app:
         # ==== 載入 MANO 參數（優先） ====
         mano_pattern = os.path.join(parent_dir, "Annotate", Object, "Sensor", f"{img_basename}_mano_*.npy")
         matching_mano_files = glob.glob(mano_pattern)
+
+        if self.Clear == False:
+            # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
+            if not matching_mano_files and img_index > 0:
+                prev_basename = img_basename.replace(str(img_index), str(img_index - Subsample), 1)
+                prev_basename = prev_basename.zfill(8)
+                fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "Sensor", f"{prev_basename}_mano_*.npy")
+                matching_mano_files = glob.glob(fallback_pattern)
+                if matching_mano_files:
+                    print(f"找不到 {img_basename} 對應的 MANO mesh，改用 {prev_basename}")
 
         if matching_mano_files:
             mano_param_path = matching_mano_files[0]
@@ -710,7 +722,7 @@ class pose_annotation_app:
                 name = k[7:]
                 new_state_dict[name] = v
             model.load_state_dict(new_state_dict)
-            self.model_2d = model.cpu()
+            self.model_2d = torch.nn.DataParallel(model, device_ids=[0]).cuda()
             self.model_2d.eval()
             print('Model 2D succesfully loaded')
             
@@ -730,7 +742,7 @@ class pose_annotation_app:
                 name = k[7:]
                 new_state_dict[name] = v
             model.load_state_dict(new_state_dict)
-            self.model_3d_3rd = model.cpu()
+            self.model_3d_3rd = torch.nn.DataParallel(model, device_ids=[0]).cuda()
             self.model_3d_3rd.eval()
             print('Model third-person 3D succesfully loaded')
             
@@ -750,7 +762,7 @@ class pose_annotation_app:
                 name = k[7:]
                 new_state_dict[name] = v
             model.load_state_dict(new_state_dict)
-            self.model_3d_ego = model.cpu()
+            self.model_3d_ego = torch.nn.DataParallel(model, device_ids=[0]).cuda()
             self.model_3d_ego.eval()
             print('Model egocentric 3D succesfully loaded')
             
@@ -937,7 +949,7 @@ class pose_annotation_app:
             y = 10 + text_h
             cv2.putText(canvas, img_basename, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
                         (255,255,255), 2, cv2.LINE_AA)
-                        
+
             r0, c0 = int(kpts_2d[0,0]), int(kpts_2d[0,1])
             label  = "PALM" if is_palm else "BACK"
             # 先算出文字尺寸與 baseline
@@ -1399,7 +1411,7 @@ class pose_annotation_app:
                 img_resized = cv2.resize(self.img_right, (params.CROP_SIZE_PRED, params.CROP_SIZE_PRED))
                 img_transposed = img_resized.transpose(2, 0, 1).astype(np.float32)
                 img_input_tensor = normalize_tensor(torch.from_numpy(img_transposed), 128.0, 256.0)\
-                    .unsqueeze_(0).cpu()
+                    .unsqueeze_(0).cuda()
                 heatmaps_pred = self.model_2d(img_input_tensor)
                 heatmaps_np = heatmaps_pred[0].cpu().data.numpy()
 
@@ -1459,7 +1471,7 @@ class pose_annotation_app:
                 kpts_2d = kpts_2d / params.IMG_SIZE * params.CROP_SIZE_PRED
                 heatmaps_np = generate_heatmaps((params.CROP_SIZE_PRED, params.CROP_SIZE_PRED), \
                     params.CROP_STRIDE_PRED, kpts_2d, sigma=params.HEATMAP_SIGMA, is_ratio=False)
-                heatmaps_tensor = torch.from_numpy(heatmaps_np.transpose(2, 0, 1)).unsqueeze_(0).cpu()
+                heatmaps_tensor = torch.from_numpy(heatmaps_np.transpose(2, 0, 1)).unsqueeze_(0).cuda()
                 # canonical space 是標準手部姿勢的3D空間（不是世界座標）
                 kpts_3d_can_pred = self.model_3d_3rd(heatmaps_tensor)
                 
@@ -1496,7 +1508,7 @@ class pose_annotation_app:
                 kpts_2d = kpts_2d / params.IMG_SIZE * params.CROP_SIZE_PRED
                 heatmaps_np = generate_heatmaps((params.CROP_SIZE_PRED, params.CROP_SIZE_PRED), \
                     params.CROP_STRIDE_PRED, kpts_2d, sigma=params.HEATMAP_SIGMA, is_ratio=False)
-                heatmaps_tensor = torch.from_numpy(heatmaps_np.transpose(2, 0, 1)).unsqueeze_(0).cpu()
+                heatmaps_tensor = torch.from_numpy(heatmaps_np.transpose(2, 0, 1)).unsqueeze_(0).cuda()
 
                 # predict 3D
                 kpts_3d_can_pred = self.model_3d_ego(heatmaps_tensor)
@@ -1642,8 +1654,14 @@ class pose_annotation_app:
         
     def button_reset_callback(self):
         self.init_variables()
+        # ==== 新增：清除所有關節點 ====
+        self.joint_anno_dict_l.clear()
+        self.joint_anno_dict_r.clear()
+        self.mano_fit_tool.reset_parameters(keep_mano=False)  # 完全重置，不保留上次的狀態
+        self.Clear = True
+        print("All keypoints cleared.")
         self.init_frame_info()
-            
+
     def on_trackbar_mano_rot0(self, val):
         self.mano_fit_tool.set_input_rot_i(params.rot0_idx, get_mano_val_from_slider('glob', 0, int(val)))
         self.update_rendered_img()
