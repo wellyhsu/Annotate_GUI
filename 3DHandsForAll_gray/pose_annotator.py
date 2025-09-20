@@ -225,40 +225,52 @@ class pose_annotation_app:
         else:
             print("Can't find 2d keypoints")
 
-        # ==== 新增：載入 3D keypoints（如有） ====
-        pattern = os.path.join(parent_dir,"Annotate", Object, "Sensor", f"{img_basename}_kpts_3d_glob_*.npy")
-        matching_files = glob.glob(pattern)
+        # ==== 載入 MANO 參數（優先） ====
+        mano_pattern = os.path.join(parent_dir, "Annotate", Object, "Sensor", f"{img_basename}_mano_*.npy")
+        matching_mano_files = glob.glob(mano_pattern)
 
-        # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
-        if not matching_files and img_index > 0:
-            prev_basename = img_basename.replace(str(img_index), str(img_index - Subsample), 1)
-            prev_basename = prev_basename.zfill(8)
-            fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "Sensor", f"{prev_basename}_kpts_3d_glob_*.npy")
-            matching_files = glob.glob(fallback_pattern)
-            if matching_files:
-                print(f"找不到 {img_basename} 對應的 keypoint，改用 {prev_basename}")
-
-        if matching_files:
-            kpt3d_path = matching_files[0]  # 只取第一個符合的檔案
-
-            # predict 3D
-            kpts_3d_can_pred_np = np.load(kpt3d_path)
-
-            kpts_2d_glob_gt_np = kpts_2d
-            # ==== 開始使用現有的 keypoints 做 MANO 擬合與渲染 ====
-            self.mano_fit_tool.reset_parameters(keep_mano=True)
-            # Fit kpts 3d canonical
-            self.mano_fit_tool.fit_3d_can_init(kpts_3d_can_pred_np, is_tracking = True)
-            # Fit xyz root
-            kpts_3d_glob_projected = self.kpts_global_project_tool.canon_to_global\
-                (kpts_2d_glob_gt_np/params.IMG_SIZE, kpts_3d_can_pred_np)
-            self.mano_fit_tool.set_xyz_root_with_projection(kpts_3d_glob_projected)
-            self.mano_fit_tool.fit_xyz_root_init(kpts_2d_glob_gt_np, is_tracking = True)
-            # Fit pose
-            self.mano_fit_tool.fit_all_pose(kpts_3d_can_pred_np, kpts_2d_glob_gt_np, is_tracking = True)
-            print(f"Loaded 3D keypoints from {kpt3d_path}")
+        if matching_mano_files:
+            mano_param_path = matching_mano_files[0]
+            self.mano_info_loaded = np.load(mano_param_path, allow_pickle=True)
+            print(f"Loaded MANO params from {mano_param_path}")
+            root_idx = 0   # 或 9，看你的資料
+            self.mano_fit_tool.set_mano(self.mano_info_loaded, root_idx=root_idx)
         else:
-            print("Can't find 3d keypoints")            
+            # ==== 載入 3D keypoints（若沒有 MANO 檔案才用 3D kpts 擬合）====
+            pattern = os.path.join(parent_dir,"Annotate", Object, "Sensor", f"{img_basename}_kpts_3d_glob_*.npy")
+            matching_files = glob.glob(pattern)
+
+            if self.Clear == False:
+                # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
+                if not matching_files and img_index > 0:
+                    prev_basename = img_basename.replace(str(img_index), str(img_index - Subsample), 1)
+                    prev_basename = prev_basename.zfill(8)
+                    fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "Sensor", f"{prev_basename}_kpts_3d_glob_*.npy")
+                    matching_files = glob.glob(fallback_pattern)
+                    if matching_files:
+                        print(f"找不到 {img_basename} 對應的 keypoint，改用 {prev_basename}")
+
+            if matching_files:
+                kpt3d_path = matching_files[0]  # 只取第一個符合的檔案
+
+                # predict 3D
+                kpts_3d_can_pred_np = np.load(kpt3d_path)
+
+                kpts_2d_glob_gt_np = kpts_2d
+                # ==== 開始使用現有的 keypoints 做 MANO 擬合與渲染 ====
+                self.mano_fit_tool.reset_parameters(keep_mano=True)
+                # Fit kpts 3d canonical
+                self.mano_fit_tool.fit_3d_can_init(kpts_3d_can_pred_np, is_tracking = True)
+                # Fit xyz root
+                kpts_3d_glob_projected = self.kpts_global_project_tool.canon_to_global\
+                    (kpts_2d_glob_gt_np/params.IMG_SIZE, kpts_3d_can_pred_np)
+                self.mano_fit_tool.set_xyz_root_with_projection(kpts_3d_glob_projected)
+                self.mano_fit_tool.fit_xyz_root_init(kpts_2d_glob_gt_np, is_tracking = True)
+                # Fit pose
+                self.mano_fit_tool.fit_all_pose(kpts_3d_can_pred_np, kpts_2d_glob_gt_np, is_tracking = True)
+                print(f"Loaded 3D keypoints from {kpt3d_path}")
+            else:
+                print("Can't find 3d keypoints")            
         self.update_rendered_img()
         self.update_slider_values()
         self.update_img_display() 
@@ -1868,3 +1880,4 @@ if __name__ == '__main__':
 
     #     # 儲存結果
     #     app.button_save_callback()
+
