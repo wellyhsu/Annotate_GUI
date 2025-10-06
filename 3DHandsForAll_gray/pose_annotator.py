@@ -21,10 +21,11 @@ def natural_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split('(\d+)', s)]
 
 Subsample = 2
-Object = 'Calendar'
+Object = 'YourObject'
+
 class pose_annotation_app:
     def __init__(self, args):
-        self.args = args
+        self.args = args 
         self.init_window()
         # Senario/Object/Sensor
         #               /D435f_Master
@@ -37,7 +38,7 @@ class pose_annotation_app:
 
         print("images folder:", self.samples_dir_path)
         self.img_path_list = self.load_input_imgs()
-        self.img_i = 102 #314# 0
+        self.img_i = 0 #314# 0
         self.init_models()
         self.init_ui()
         
@@ -212,6 +213,7 @@ class pose_annotation_app:
         
             kpts_2d = np.load(kpt2d_path)  # [21, 2]
             print(self.img_orig.shape)
+            print(kpts_2d)
             if self.img_orig.shape[0] != self.img_orig.shape[1]:
                 kpts_2d[:,0] = (params.IMG_SIZE-self.img_orig.shape[0]*(params.IMG_SIZE/self.img_orig.shape[1]))/2+ kpts_2d[:,0]*self.img_orig.shape[0]*(params.IMG_SIZE/self.img_orig.shape[1])# height
                 kpts_2d[:,1] = kpts_2d[:,1]*params.IMG_SIZE # width
@@ -722,7 +724,7 @@ class pose_annotation_app:
                 name = k[7:]
                 new_state_dict[name] = v
             model.load_state_dict(new_state_dict)
-            self.model_2d = torch.nn.DataParallel(model, device_ids=[0]).cpu()
+            self.model_2d = torch.nn.DataParallel(model, device_ids=[0]).cuda()
             self.model_2d.eval()
             print('Model 2D succesfully loaded')
             
@@ -742,7 +744,7 @@ class pose_annotation_app:
                 name = k[7:]
                 new_state_dict[name] = v
             model.load_state_dict(new_state_dict)
-            self.model_3d_3rd = torch.nn.DataParallel(model, device_ids=[0]).cpu()
+            self.model_3d_3rd = torch.nn.DataParallel(model, device_ids=[0]).cuda()
             self.model_3d_3rd.eval()
             print('Model third-person 3D succesfully loaded')
             
@@ -762,7 +764,7 @@ class pose_annotation_app:
                 name = k[7:]
                 new_state_dict[name] = v
             model.load_state_dict(new_state_dict)
-            self.model_3d_ego = torch.nn.DataParallel(model, device_ids=[0]).cpu()
+            self.model_3d_ego = torch.nn.DataParallel(model, device_ids=[0]).cuda()
             self.model_3d_ego.eval()
             print('Model egocentric 3D succesfully loaded')
             
@@ -1411,7 +1413,7 @@ class pose_annotation_app:
                 img_resized = cv2.resize(self.img_right, (params.CROP_SIZE_PRED, params.CROP_SIZE_PRED))
                 img_transposed = img_resized.transpose(2, 0, 1).astype(np.float32)
                 img_input_tensor = normalize_tensor(torch.from_numpy(img_transposed), 128.0, 256.0)\
-                    .unsqueeze_(0).cpu()
+                    .unsqueeze_(0).cuda()
                 heatmaps_pred = self.model_2d(img_input_tensor)
                 heatmaps_np = heatmaps_pred[0].cpu().data.numpy()
 
@@ -1456,6 +1458,14 @@ class pose_annotation_app:
         self.update_slider_values()
             
     def button_fit_2d_callback(self):
+        # ✅ 新增：同步 GUI 的 keypoints 給 mano_fit_tool
+        kpts_2d_np = np.full((21, 2), np.nan, dtype=np.float32)
+        for i, (x, y) in self.joint_anno_dict_l.items():
+            kpts_2d_np[i] = [x, y]
+        for joint_idx, kpt_2d_glob in enumerate(kpts_2d_np):
+            if not np.isnan(kpt_2d_glob[0]):
+                self.mano_fit_tool.set_kpt_2d(joint_idx, kpt_2d_glob)
+                
         self.mano_fit_tool.fit_2d_pose_annotate()
         self.update_rendered_img()
         self.update_slider_values()
@@ -1471,7 +1481,7 @@ class pose_annotation_app:
                 kpts_2d = kpts_2d / params.IMG_SIZE * params.CROP_SIZE_PRED
                 heatmaps_np = generate_heatmaps((params.CROP_SIZE_PRED, params.CROP_SIZE_PRED), \
                     params.CROP_STRIDE_PRED, kpts_2d, sigma=params.HEATMAP_SIGMA, is_ratio=False)
-                heatmaps_tensor = torch.from_numpy(heatmaps_np.transpose(2, 0, 1)).unsqueeze_(0).cpu()
+                heatmaps_tensor = torch.from_numpy(heatmaps_np.transpose(2, 0, 1)).unsqueeze_(0).cuda()
                 # canonical space 是標準手部姿勢的3D空間（不是世界座標）
                 kpts_3d_can_pred = self.model_3d_3rd(heatmaps_tensor)
                 
@@ -1508,7 +1518,7 @@ class pose_annotation_app:
                 kpts_2d = kpts_2d / params.IMG_SIZE * params.CROP_SIZE_PRED
                 heatmaps_np = generate_heatmaps((params.CROP_SIZE_PRED, params.CROP_SIZE_PRED), \
                     params.CROP_STRIDE_PRED, kpts_2d, sigma=params.HEATMAP_SIGMA, is_ratio=False)
-                heatmaps_tensor = torch.from_numpy(heatmaps_np.transpose(2, 0, 1)).unsqueeze_(0).cpu()
+                heatmaps_tensor = torch.from_numpy(heatmaps_np.transpose(2, 0, 1)).unsqueeze_(0).cuda()
 
                 # predict 3D
                 kpts_3d_can_pred = self.model_3d_ego(heatmaps_tensor)
@@ -1898,5 +1908,4 @@ if __name__ == '__main__':
 
     #     # 儲存結果
     #     app.button_save_callback()
-
 
