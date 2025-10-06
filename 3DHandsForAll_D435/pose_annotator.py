@@ -36,7 +36,7 @@ class pose_annotation_app:
 
         print("images folder:", self.samples_dir_path)
         self.img_path_list = self.load_input_imgs()
-        self.img_i = 9 #314# 0
+        self.img_i = 0
         self.init_models()
         self.init_ui()
         
@@ -1891,4 +1891,5 @@ if __name__ == '__main__':
 
     #     # 儲存結果
     #     app.button_save_callback()
+
 
