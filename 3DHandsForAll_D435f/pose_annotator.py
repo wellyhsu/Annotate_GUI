@@ -20,7 +20,8 @@ def natural_key(s):
     # 將字串拆成數字與非數字部分，用於自然排序
     return [int(text) if text.isdigit() else text.lower() for text in re.split('(\d+)', s)]
 Subsample = 2
-Object = 'Box'
+Object = 'YourObject'
+
 class pose_annotation_app:
     def __init__(self, args):
         self.args = args
@@ -1448,6 +1449,14 @@ class pose_annotation_app:
         self.update_slider_values()
             
     def button_fit_2d_callback(self):
+        # ✅ 新增：同步 GUI 的 keypoints 給 mano_fit_tool
+        kpts_2d_np = np.full((21, 2), np.nan, dtype=np.float32)
+        for i, (x, y) in self.joint_anno_dict_l.items():
+            kpts_2d_np[i] = [x, y]
+        for joint_idx, kpt_2d_glob in enumerate(kpts_2d_np):
+            if not np.isnan(kpt_2d_glob[0]):
+                self.mano_fit_tool.set_kpt_2d(joint_idx, kpt_2d_glob)
+
         self.mano_fit_tool.fit_2d_pose_annotate()
         self.update_rendered_img()
         self.update_slider_values()
@@ -1891,5 +1900,4 @@ if __name__ == '__main__':
 
     #     # 儲存結果
     #     app.button_save_callback()
-
 
