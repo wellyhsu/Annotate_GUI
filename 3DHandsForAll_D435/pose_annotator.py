@@ -14,12 +14,13 @@ import trimesh
 import glob
 import re
 from pathlib import Path
+import os
 
 def natural_key(s):
     # 將字串拆成數字與非數字部分，用於自然排序
     return [int(text) if text.isdigit() else text.lower() for text in re.split('(\d+)', s)]
 Subsample = 2
-Object = "Night_light"
+Object = 'Box'
 class pose_annotation_app:
     def __init__(self, args):
         self.args = args
@@ -31,11 +32,11 @@ class pose_annotation_app:
         #                                       /D435f_Master
         #                                       /D435_Slave
         # self.samples_dir_path = f"sample_imgs"
-        self.samples_dir_path = f"../Data/{Object}/D435_slave/RGB"
+        self.samples_dir_path = f"../Data/{Object}/D435_Slave/RGB"
 
         print("images folder:", self.samples_dir_path)
         self.img_path_list = self.load_input_imgs()
-        self.img_i = 0 #314# 0
+        self.img_i = 9 #314# 0
         self.init_models()
         self.init_ui()
         
@@ -49,6 +50,7 @@ class pose_annotation_app:
         self.init_kpts_projector()
         
     def init_variables(self):
+        self.Clear=False
         self.mano_fit_tool = mano_wrapper.mano_fitter(params.MANO_PATH, is_annotating = True)
         self.mano_fit_tool.set_input_size(params.IMG_SIZE)
         self.img_left, self.img_center, self.img_right = None, None, None
@@ -186,7 +188,6 @@ class pose_annotation_app:
         match = re.match(r"(\d+)", img_basename)
         img_index = int(match.group(1)) if match else -1  # 若無數字則 -1
         print(img_path)
-        print(parent_dir)
 
         # 嘗試尋找相同編號的 keypoint 檔案
         pattern = os.path.join(parent_dir,"Annotate", Object, "D435_Slave", f"{img_basename}_kpts_2d_glob_*.npy")
@@ -223,43 +224,65 @@ class pose_annotation_app:
         else:
             print("Can't find 2d keypoints")
 
-        # ==== 新增：載入 3D keypoints（如有） ====
-        pattern = os.path.join(parent_dir,"Annotate", Object, "D435_Slave", f"{img_basename}_kpts_3d_glob_*.npy")
-        matching_files = glob.glob(pattern)
+        # ==== 載入 MANO 參數（優先） ====
+        mano_pattern = os.path.join(parent_dir, "Annotate", Object, "D435_Slave", f"{img_basename}_mano_*.npy")
+        matching_mano_files = glob.glob(mano_pattern)
 
-        # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
-        if not matching_files and img_index > 0:
-            prev_basename = img_basename.replace(str(img_index), str(img_index - Subsample), 1)
-            prev_basename = prev_basename.zfill(8)
-            fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "D435_Slave", f"{prev_basename}_kpts_3d_glob_*.npy")
-            matching_files = glob.glob(fallback_pattern)
-            if matching_files:
-                print(f"找不到 {img_basename} 對應的 keypoint，改用 {prev_basename}")
+        if self.Clear == False:
+            # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
+            if not matching_mano_files and img_index > 0:
+                prev_basename = img_basename.replace(str(img_index), str(img_index - Subsample), 1)
+                prev_basename = prev_basename.zfill(8)
+                fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "D435_Slave", f"{prev_basename}_mano_*.npy")
+                matching_mano_files = glob.glob(fallback_pattern)
+                if matching_mano_files:
+                    print(f"找不到 {img_basename} 對應的 MANO mesh，改用 {prev_basename}")
 
-        if matching_files:
-            kpt3d_path = matching_files[0]  # 只取第一個符合的檔案
-
-            # predict 3D
-            kpts_3d_can_pred_np = np.load(kpt3d_path)
-
-            kpts_2d_glob_gt_np = kpts_2d
-            # ==== 開始使用現有的 keypoints 做 MANO 擬合與渲染 ====
-            self.mano_fit_tool.reset_parameters(keep_mano=True)
-            # Fit kpts 3d canonical
-            self.mano_fit_tool.fit_3d_can_init(kpts_3d_can_pred_np, is_tracking = True)
-            # Fit xyz root
-            kpts_3d_glob_projected = self.kpts_global_project_tool.canon_to_global\
-                (kpts_2d_glob_gt_np/params.IMG_SIZE, kpts_3d_can_pred_np)
-            self.mano_fit_tool.set_xyz_root_with_projection(kpts_3d_glob_projected)
-            self.mano_fit_tool.fit_xyz_root_init(kpts_2d_glob_gt_np, is_tracking = True)
-            # Fit pose
-            self.mano_fit_tool.fit_all_pose(kpts_3d_can_pred_np, kpts_2d_glob_gt_np, is_tracking = True)
-            print(f"Loaded 3D keypoints from {kpt3d_path}")
+        if matching_mano_files:
+            mano_param_path = matching_mano_files[0]
+            self.mano_info_loaded = np.load(mano_param_path, allow_pickle=True)
+            print(f"Loaded MANO params from {mano_param_path}")
+            root_idx = 0   # 或 9，看你的資料
+            self.mano_fit_tool.set_mano(self.mano_info_loaded, root_idx=root_idx)
         else:
-            print("Can't find 3d keypoints")            
+            # ==== 載入 3D keypoints（若沒有 MANO 檔案才用 3D kpts 擬合）====
+            pattern = os.path.join(parent_dir,"Annotate", Object, "D435_Slave", f"{img_basename}_kpts_3d_glob_*.npy")
+            matching_files = glob.glob(pattern)
+
+            if self.Clear == False:
+                # 若找不到就試圖找 (編號 - 1) 的 keypoint 檔案
+                if not matching_files and img_index > 0:
+                    prev_basename = img_basename.replace(str(img_index), str(img_index - Subsample), 1)
+                    prev_basename = prev_basename.zfill(8)
+                    fallback_pattern = os.path.join(parent_dir,"Annotate", Object, "D435_Slave", f"{prev_basename}_kpts_3d_glob_*.npy")
+                    matching_files = glob.glob(fallback_pattern)
+                    if matching_files:
+                        print(f"找不到 {img_basename} 對應的 keypoint，改用 {prev_basename}")
+
+            if matching_files:
+                kpt3d_path = matching_files[0]  # 只取第一個符合的檔案
+
+                # predict 3D
+                kpts_3d_can_pred_np = np.load(kpt3d_path)
+
+                kpts_2d_glob_gt_np = kpts_2d
+                # ==== 開始使用現有的 keypoints 做 MANO 擬合與渲染 ====
+                self.mano_fit_tool.reset_parameters(keep_mano=True)
+                # Fit kpts 3d canonical
+                self.mano_fit_tool.fit_3d_can_init(kpts_3d_can_pred_np, is_tracking = True)
+                # Fit xyz root
+                kpts_3d_glob_projected = self.kpts_global_project_tool.canon_to_global\
+                    (kpts_2d_glob_gt_np/params.IMG_SIZE, kpts_3d_can_pred_np)
+                self.mano_fit_tool.set_xyz_root_with_projection(kpts_3d_glob_projected)
+                self.mano_fit_tool.fit_xyz_root_init(kpts_2d_glob_gt_np, is_tracking = True)
+                # Fit pose
+                self.mano_fit_tool.fit_all_pose(kpts_3d_can_pred_np, kpts_2d_glob_gt_np, is_tracking = True)
+                print(f"Loaded 3D keypoints from {kpt3d_path}")
+            else:
+                print("Can't find 3d keypoints")            
         self.update_rendered_img()
         self.update_slider_values()
-        self.update_img_display()   
+        self.update_img_display()      
 
     def on_key_left(self, event):
         current = self.window.slider_joint.get()
@@ -277,7 +300,7 @@ class pose_annotation_app:
         print(f"切換到關節點：{index}")
         self.window.slider_joint.set(index)
         self.on_trackbar_joint(index)
-
+        
     def init_sliders(self):
         if self.window.panel_sliders is not None:
             self.window.panel_sliders.pack_forget()
@@ -754,22 +777,10 @@ class pose_annotation_app:
         若沒有，退回用 IMG_SIZE 與 args.{fx,fy,cx,cy} 建立。
         """
         K = np.array([
-            [374.56138803, 0, 196.61636169],
-            [0, 374.99122761, 209.00920516],
-            [0,0,1]
+           [380.75828375, 0, 192.03685067],
+           [0, 378.17469921, 210.16451343],
+           [0,0,1]
         ])
-        # if hasattr(self.mano_fit_tool, "get_intrinsics"):
-        #     K = np.asarray(self.mano_fit_tool.get_intrinsics(), dtype=np.float32)
-        # elif hasattr(self.mano_fit_tool, "K"):
-        #     K = np.asarray(self.mano_fit_tool.K, dtype=np.float32)
-        # if K is None or K.shape != (3, 3):
-        #     fx = getattr(self.args, "fx", 1000.0)
-        #     fy = getattr(self.args, "fy", 1000.0)
-        #     cx = getattr(self.args, "cx", params.IMG_SIZE/2)
-        #     cy = getattr(self.args, "cy", params.IMG_SIZE/2)
-        #     K = np.array([[fx, 0, cx],
-        #                 [0, fy, cy],
-        #                 [0,  0,  1]], dtype=np.float32)
         return K
 
     @staticmethod
@@ -919,6 +930,18 @@ class pose_annotation_app:
             cv2.fillConvexPoly(canvas, poly, fill)
 
             # 標籤
+            img_path = self.img_path_list[self.img_i]
+            img_dir, img_filename = os.path.split(img_path)
+            img_basename, _ = os.path.splitext(img_filename)
+            # 先算出文字尺寸與 baseline
+            margin = 300  # 與邊界的內縮距離
+            (text_w, text_h), baseline = cv2.getTextSize(img_basename, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+            # 左上角放字：x=margin，y 要放在「基線」= margin + text_h
+            x = margin
+            y = 10 + text_h
+            cv2.putText(canvas, img_basename, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                        (255,255,255), 2, cv2.LINE_AA)
+                        
             r0, c0 = int(kpts_2d[0,0]), int(kpts_2d[0,1])
             label  = "PALM" if is_palm else "BACK"
             # 先算出文字尺寸與 baseline
@@ -997,10 +1020,7 @@ class pose_annotation_app:
                             cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255,255,255), 1, cv2.LINE_AA)
 
         return canvas
-
-
-
-
+    
     def in_img_left_range(self, row, col):
         if (row >= params.IMG_PADDING and row < params.IMG_SIZE + params.IMG_PADDING) and \
             (col >= params.IMG_PADDING and col < params.IMG_SIZE + params.IMG_PADDING):
@@ -1627,6 +1647,12 @@ class pose_annotation_app:
         
     def button_reset_callback(self):
         self.init_variables()
+        # ==== 新增：清除所有關節點 ====
+        self.joint_anno_dict_l.clear()
+        self.joint_anno_dict_r.clear()
+        self.mano_fit_tool.reset_parameters(keep_mano=False)  # 完全重置，不保留上次的狀態
+        self.Clear = True
+        print("All keypoints cleared.")
         self.init_frame_info()
             
     def on_trackbar_mano_rot0(self, val):
@@ -1865,3 +1891,4 @@ if __name__ == '__main__':
 
     #     # 儲存結果
     #     app.button_save_callback()
+
