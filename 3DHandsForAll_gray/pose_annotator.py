@@ -724,7 +724,7 @@ class pose_annotation_app:
                 name = k[7:]
                 new_state_dict[name] = v
             model.load_state_dict(new_state_dict)
-            self.model_2d = torch.nn.DataParallel(model, device_ids=[0]).cuda()
+            self.model_2d = torch.nn.DataParallel(model, device_ids=[0]).cpu()
             self.model_2d.eval()
             print('Model 2D succesfully loaded')
             
@@ -744,7 +744,7 @@ class pose_annotation_app:
                 name = k[7:]
                 new_state_dict[name] = v
             model.load_state_dict(new_state_dict)
-            self.model_3d_3rd = torch.nn.DataParallel(model, device_ids=[0]).cuda()
+            self.model_3d_3rd = torch.nn.DataParallel(model, device_ids=[0]).cpu()
             self.model_3d_3rd.eval()
             print('Model third-person 3D succesfully loaded')
             
@@ -764,7 +764,7 @@ class pose_annotation_app:
                 name = k[7:]
                 new_state_dict[name] = v
             model.load_state_dict(new_state_dict)
-            self.model_3d_ego = torch.nn.DataParallel(model, device_ids=[0]).cuda()
+            self.model_3d_ego = torch.nn.DataParallel(model, device_ids=[0]).cpu()
             self.model_3d_ego.eval()
             print('Model egocentric 3D succesfully loaded')
             
@@ -1413,7 +1413,7 @@ class pose_annotation_app:
                 img_resized = cv2.resize(self.img_right, (params.CROP_SIZE_PRED, params.CROP_SIZE_PRED))
                 img_transposed = img_resized.transpose(2, 0, 1).astype(np.float32)
                 img_input_tensor = normalize_tensor(torch.from_numpy(img_transposed), 128.0, 256.0)\
-                    .unsqueeze_(0).cuda()
+                    .unsqueeze_(0).cpu()
                 heatmaps_pred = self.model_2d(img_input_tensor)
                 heatmaps_np = heatmaps_pred[0].cpu().data.numpy()
 
@@ -1481,7 +1481,7 @@ class pose_annotation_app:
                 kpts_2d = kpts_2d / params.IMG_SIZE * params.CROP_SIZE_PRED
                 heatmaps_np = generate_heatmaps((params.CROP_SIZE_PRED, params.CROP_SIZE_PRED), \
                     params.CROP_STRIDE_PRED, kpts_2d, sigma=params.HEATMAP_SIGMA, is_ratio=False)
-                heatmaps_tensor = torch.from_numpy(heatmaps_np.transpose(2, 0, 1)).unsqueeze_(0).cuda()
+                heatmaps_tensor = torch.from_numpy(heatmaps_np.transpose(2, 0, 1)).unsqueeze_(0).cpu()
                 # canonical space 是標準手部姿勢的3D空間（不是世界座標）
                 kpts_3d_can_pred = self.model_3d_3rd(heatmaps_tensor)
                 
@@ -1518,7 +1518,7 @@ class pose_annotation_app:
                 kpts_2d = kpts_2d / params.IMG_SIZE * params.CROP_SIZE_PRED
                 heatmaps_np = generate_heatmaps((params.CROP_SIZE_PRED, params.CROP_SIZE_PRED), \
                     params.CROP_STRIDE_PRED, kpts_2d, sigma=params.HEATMAP_SIGMA, is_ratio=False)
-                heatmaps_tensor = torch.from_numpy(heatmaps_np.transpose(2, 0, 1)).unsqueeze_(0).cuda()
+                heatmaps_tensor = torch.from_numpy(heatmaps_np.transpose(2, 0, 1)).unsqueeze_(0).cpu()
 
                 # predict 3D
                 kpts_3d_can_pred = self.model_3d_ego(heatmaps_tensor)
@@ -1908,4 +1908,5 @@ if __name__ == '__main__':
 
     #     # 儲存結果
     #     app.button_save_callback()
+
 
